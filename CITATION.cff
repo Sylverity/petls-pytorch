@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+message: "If you use PETLS-PyTorch in your research, please cite this software and the original PETLS paper."
+type: software
+title: "PETLS-PyTorch: A PyTorch-native implementation of persistent topological Laplacians"
+version: "1.0.0"
+authors:
+  - family-names: "Marston"
+    given-names: "Sumner K."
+    affiliation: "Sylverity Research"
+  - name: "Sylverity Research"
+repository-code: "https://github.com/Sylverity/petls-pytorch"
+license: Apache-2.0
+date-released: "2026-06-25"
+references:
+  - type: article
+    title: "PETLS: PErsistent Topological Laplacian Software"
+    authors:
+      - family-names: "Jones"
+        given-names: "Benjamin"
+      - family-names: "Wei"
+        given-names: "Guo-Wei"
+    year: 2025
+    url: "https://arxiv.org/abs/2508.11560"
+  - type: software-code
+    title: "PETLS: Persistent Topological Laplacian Software"
+    authors:
+      - family-names: "Jones"
+        given-names: "Benjamin"
+    repository-code: "https://github.com/bdjones13/PETLS"
+    url: "https://www.benjones-math.com/software/PETLS/"

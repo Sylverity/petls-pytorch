@@ -1,0 +1,57 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Build and packaging outputs
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Local environment and editor files
+.env
+.env.*
+!.env.example
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Benchmark and profiling outputs
+profile.csv
+*.prof
+*.profraw
+*.profdata
+benchmark-results/
+benchmark_results/
+benchmarks/results/
+
+# Generated PETLS artifacts
+*_spectra_*.txt
+*_spectra_summary.txt
+*.mtx
+
+# Torch/checkpoint artifacts
+*.pt
+*.pth
+*.ckpt
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# uv lockfile (library projects should not commit this)
+uv.lock

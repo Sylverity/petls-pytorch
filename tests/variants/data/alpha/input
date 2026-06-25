@@ -1,0 +1,9 @@
+# Default is 3 dimension
+OFF
+# 4 vertices - 0 face - 0 edge
+4 0 0
+# Point set:
+0.0 0.0 0.0
+0.0 0.0 1.0
+0.0 1.0 0.0
+1.0 0.0 0.0
