@@ -2,7 +2,7 @@
 PETLS Benchmark CLI
 
 Usage:
-    python -m benchmark --preset standard --package petls_pytorch
+    python -m benchmark --preset standard --package petls-pytorch
     python -m benchmark --dataset torus --n_points 5000 --complex alpha --max_dim 3
     python -m benchmark --preset quick --package petls --algorithm selfadjoint
 
@@ -150,16 +150,16 @@ Available presets:  {", ".join(PRESETS.keys())}
 
 Examples:
   # Quick smoke test
-  python -m benchmark --preset quick --package petls_pytorch
+  python -m benchmark --preset quick --package petls-pytorch
 
   # Reference PETLS run
   python -m benchmark --preset standard --package petls --algorithm selfadjoint
 
   # Intensive GPU stress test
-  python -m benchmark --preset intensive --package petls_pytorch --algorithm eigvalsh --device cuda
+  python -m benchmark --preset intensive --package petls-pytorch --algorithm eigvalsh --device cuda
 
   # Single custom run
-  python -m benchmark --dataset torus --n_points 5000 --complex alpha --max_dim 3 --package petls_pytorch
+  python -m benchmark --dataset torus --n_points 5000 --complex alpha --max_dim 3 --package petls-pytorch
 """,
     )
     parser.add_argument(
@@ -203,9 +203,9 @@ Examples:
     parser.add_argument(
         "--package",
         type=str,
-        choices=["petls", "petls_pytorch"],
-        default="petls_pytorch",
-        help="Backend package to benchmark (default: petls_pytorch)",
+        choices=["petls", "petls-pytorch"],
+        default="petls-pytorch",
+        help="Backend package to benchmark (default: petls-pytorch)",
     )
     parser.add_argument(
         "--output_dir", type=str, default="./benchmark_results", help="Directory to write results"
@@ -244,7 +244,7 @@ Examples:
         print(f"# Running preset: {args.preset}")
         print(f"# Package:        {args.package}")
         print(f"# Algorithm:      {args.algorithm}")
-        print(f"# Device:         {args.device if args.package == 'petls_pytorch' else 'cpu'}")
+        print(f"# Device:         {args.device if args.package == 'petls-pytorch' else 'cpu'}")
         print(f"# Output:         {args.output_dir}")
         print(f"{'#' * 60}\n")
         runner.run_suite(name=f"{args.package}_{preset['name']}", configs=preset["configs"])

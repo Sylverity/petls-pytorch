@@ -4,8 +4,8 @@
 
 ### Changed
 
-- Renamed the import package and benchmark backend selector to `petls_pytorch`
-  so the project name, install name, imports, and documentation use one name.
+- Aligned public package, documentation, and benchmark naming on `petls-pytorch`;
+  the Python import package remains `petls_pytorch`.
 
 ## 1.0.1 - 2026-06-28
 
@@ -13,7 +13,7 @@
 
 - Fixed `Profile.time_to_csv()` after `spectra()` on vertex-only complexes.
 - Fixed benchmark documentation and CLI usage by using the real `python -m benchmark` entry point.
-- Fixed benchmark dataset generation so the same runner can benchmark either `petls` or `petls_pytorch` via `--package`.
+- Fixed benchmark dataset generation so the same runner can benchmark either `petls` or `petls-pytorch` via `--package`.
 - Removed deprecated setuptools license metadata that emitted build warnings.
 
 ### Changed
