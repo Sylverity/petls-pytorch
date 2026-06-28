@@ -163,6 +163,8 @@ python -m benchmark \
 pip install petls-pytorch
 ```
 
+Requires CPython 3.10, 3.11, 3.12, 3.13, or 3.14.
+
 Dependencies:
 
 - `torch`
