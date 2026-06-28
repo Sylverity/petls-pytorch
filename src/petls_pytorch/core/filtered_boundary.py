@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import torch
 
-from petls_torch._config import get_device
+from petls_pytorch._config import get_device
 
 
 class FilteredBoundaryMatrix:

@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from petls_torch.core.eigenvalues import solve_eigenvalues, solve_eigenpairs
+from petls_pytorch.core.eigenvalues import solve_eigenvalues, solve_eigenpairs
 from tests.conftest import assert_tensors_close
 
 

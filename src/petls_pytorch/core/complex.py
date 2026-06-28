@@ -14,9 +14,9 @@ from typing import Callable, List, Optional, Tuple
 import numpy as np
 import torch
 
-from petls_torch._config import get_device, get_dtype
-from petls_torch.core.filtered_boundary import FilteredBoundaryMatrix
-from petls_torch.core.profile import Profile
+from petls_pytorch._config import get_device, get_dtype
+from petls_pytorch.core.filtered_boundary import FilteredBoundaryMatrix
+from petls_pytorch.core.profile import Profile
 
 
 class Complex:
@@ -63,7 +63,7 @@ class Complex:
         self._eigenvalue_order: str = "SM"
 
         if simplex_tree is not None:
-            from petls_torch.utils.simplex_tree import simplex_tree_boundaries_filtrations
+            from petls_pytorch.utils.simplex_tree import simplex_tree_boundaries_filtrations
 
             boundaries, filtrations = simplex_tree_boundaries_filtrations(simplex_tree)
 
@@ -220,7 +220,7 @@ class Complex:
 
     def get_L(self, dim: int, a: float, b: float) -> torch.Tensor:
         """Get persistent Laplacian matrix L^{dim}(a,b) as dense tensor."""
-        from petls_torch.core.laplacian import get_L
+        from petls_pytorch.core.laplacian import get_L
 
         return get_L(dim, a, b, self.filtered_boundaries, self.top_dim, self.device)
 
@@ -243,7 +243,7 @@ class Complex:
 
     def get_up(self, dim: int, a: float, b: float) -> torch.Tensor:
         """Get persistent up-Laplacian."""
-        from petls_torch.core.laplacian import get_up
+        from petls_pytorch.core.laplacian import get_up
 
         if dim >= self.top_dim:
             # No higher-dimensional simplices → zero matrix sized to dim-simplices at a
@@ -258,14 +258,14 @@ class Complex:
 
     def get_down(self, dim: int, a: float) -> torch.Tensor:
         """Get persistent down-Laplacian."""
-        from petls_torch.core.laplacian import get_down
+        from petls_pytorch.core.laplacian import get_down
 
         return get_down(self.filtered_boundaries[dim], a, self.device)
 
     def _solve_eigs(self, L: torch.Tensor) -> torch.Tensor:
         """Dispatch to eigenvalue solver."""
-        from petls_torch.core.eigenvalues import solve_eigenvalues
-        from petls_torch import sparse_wrapper
+        from petls_pytorch.core.eigenvalues import solve_eigenvalues
+        from petls_pytorch import sparse_wrapper
 
         algorithm = self._eigs_algorithm
         if algorithm == "sparse":
@@ -282,7 +282,7 @@ class Complex:
 
     def _solve_eigenpairs(self, L: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Dispatch to eigenpair solver."""
-        from petls_torch.core.eigenvalues import solve_eigenpairs
+        from petls_pytorch.core.eigenvalues import solve_eigenpairs
 
         return solve_eigenpairs(L, algorithm="eigh")
 

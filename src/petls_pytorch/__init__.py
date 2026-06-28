@@ -11,16 +11,16 @@ import numpy as np
 from scipy.linalg import eigvalsh
 from scipy.sparse import coo_matrix
 
-from petls_torch._config import get_device, get_dtype, set_device, set_dtype
-from petls_torch.core.complex import Complex
-from petls_torch.core.profile import Profile, Timer
+from petls_pytorch._config import get_device, get_dtype, set_device, set_dtype
+from petls_pytorch.core.complex import Complex
+from petls_pytorch.core.profile import Profile, Timer
 
-from petls_torch.variants.alpha import Alpha
-from petls_torch.variants.dflag import dFlag
-from petls_torch.variants.rips import Rips
-from petls_torch.variants.sheaf import sheaf_simplex_tree, PersistentSheafLaplacian
-from petls_torch.utils.plotting import summaries, plot_summary
-from petls_torch.utils.simplex_tree import simplex_tree_boundaries_filtrations
+from petls_pytorch.variants.alpha import Alpha
+from petls_pytorch.variants.dflag import dFlag
+from petls_pytorch.variants.rips import Rips
+from petls_pytorch.variants.sheaf import sheaf_simplex_tree, PersistentSheafLaplacian
+from petls_pytorch.utils.plotting import summaries, plot_summary
+from petls_pytorch.utils.simplex_tree import simplex_tree_boundaries_filtrations
 
 __version__ = "1.0.1"
 

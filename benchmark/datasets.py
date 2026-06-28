@@ -133,7 +133,7 @@ def generate_dataset(
     filtration_mode: str = "quantile",
     seed: int = 42,
     cache_dir: Optional[str] = None,
-    package: str = "petls_torch",
+    package: str = "petls_pytorch",
     device: Optional[str] = None,
 ) -> dict:
     """
@@ -142,7 +142,7 @@ def generate_dataset(
     Returns a dict with:
         points          : np.ndarray, shape (n_points, 3)
         complex_type    : 'alpha' or 'rips'
-        package         : 'petls' or 'petls_torch'
+        package         : 'petls' or 'petls_pytorch'
         max_dim         : int
         filtrations     : List[float] (sampled subset)
         all_filtrations : List[float] (full set)
@@ -154,15 +154,15 @@ def generate_dataset(
 
         Alpha = petls.Alpha
         Rips = petls.Rips
-    elif package == "petls_torch":
-        import petls_torch
+    elif package == "petls_pytorch":
+        import petls_pytorch
 
         if device is not None:
-            petls_torch.set_device(device)
-        Alpha = petls_torch.Alpha
-        Rips = petls_torch.Rips
+            petls_pytorch.set_device(device)
+        Alpha = petls_pytorch.Alpha
+        Rips = petls_pytorch.Rips
     else:
-        raise ValueError(f"package must be 'petls' or 'petls_torch', got {package}")
+        raise ValueError(f"package must be 'petls' or 'petls_pytorch', got {package}")
 
     points = generate_point_cloud(name, n_points, seed=seed)
 

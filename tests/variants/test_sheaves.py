@@ -7,7 +7,7 @@ from math import sqrt
 import gudhi
 import numpy as np
 
-from petls_torch.variants.sheaf import sheaf_simplex_tree, PersistentSheafLaplacian
+from petls_pytorch.variants.sheaf import sheaf_simplex_tree, PersistentSheafLaplacian
 
 
 def my_restriction(simplex, coface, sst):

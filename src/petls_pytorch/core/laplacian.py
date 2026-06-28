@@ -14,10 +14,10 @@ from __future__ import annotations
 import torch
 from typing import TYPE_CHECKING
 
-from petls_torch._config import get_device, get_dtype
+from petls_pytorch._config import get_device, get_dtype
 
 if TYPE_CHECKING:
-    from petls_torch.core.filtered_boundary import FilteredBoundaryMatrix
+    from petls_pytorch.core.filtered_boundary import FilteredBoundaryMatrix
 
 
 def _symmetrize_lower(L: torch.Tensor) -> torch.Tensor:

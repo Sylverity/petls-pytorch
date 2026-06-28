@@ -10,7 +10,7 @@ import pytest
 import torch
 
 petls = pytest.importorskip("petls", reason="Reference PETLS not available")
-from petls_torch.variants.alpha import Alpha  # noqa: E402
+from petls_pytorch.variants.alpha import Alpha  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Tolerance

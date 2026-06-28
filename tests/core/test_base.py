@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 import torch
 
-from petls_torch.core.complex import Complex
+from petls_pytorch.core.complex import Complex
 from tests.conftest import assert_tensors_close
 
 

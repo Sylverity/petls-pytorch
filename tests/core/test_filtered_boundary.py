@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 import torch
 
-from petls_torch.core.filtered_boundary import FilteredBoundaryMatrix
+from petls_pytorch.core.filtered_boundary import FilteredBoundaryMatrix
 from tests.conftest import assert_tensors_close
 
 

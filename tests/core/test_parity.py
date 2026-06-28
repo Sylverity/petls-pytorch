@@ -1,7 +1,7 @@
 """
 Feature-parity tests against the original PETLS Python API.
 
-These tests verify that petls_torch exposes the same public signatures and
+These tests verify that petls_pytorch exposes the same public signatures and
 convenience names as the original ``petls`` package.
 """
 
@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 import torch
 
-import petls_torch
+import petls_pytorch
 
 
 @pytest.fixture
@@ -18,7 +18,7 @@ def small_complex():
     d1 = np.array([[-1, 0, -1], [1, -1, 0], [0, 1, 1]], dtype=np.float32)
     d2 = np.array([[1], [1], [-1]], dtype=np.float32)
     filtrations = [[0.0, 1.0, 2.0], [3.0, 4.0, 5.0], [5.0]]
-    return petls_torch.Complex([d1, d2], filtrations)
+    return petls_pytorch.Complex([d1, d2], filtrations)
 
 
 def test_eigenpairs_allpairs_signature(small_complex):
@@ -62,7 +62,7 @@ def test_print_boundaries_does_not_raise(small_complex, capsys):
 
 def test_profile_wrap_up(small_complex):
     """Profile.wrap_up records one computation and computes Betti/λ."""
-    profile = petls_torch.Profile()
+    profile = petls_pytorch.Profile()
     profile.wrap_up(dim=0, a=3.0, b=4.0, L_rows=3, eigs=[0.0, 1.0, 2.0])
     assert profile.dims == [0]
     assert profile.filtration_a == [3.0]
@@ -73,14 +73,14 @@ def test_profile_wrap_up(small_complex):
 
 
 def test_eigvalsh_export():
-    """petls_torch exposes scipy.linalg.eigvalsh like the original package."""
+    """petls_pytorch exposes scipy.linalg.eigvalsh like the original package."""
     from scipy.linalg import eigvalsh as scipy_eigvalsh
 
-    assert petls_torch.eigvalsh is scipy_eigvalsh
+    assert petls_pytorch.eigvalsh is scipy_eigvalsh
 
 
 def test_coo_matrix_export():
-    """petls_torch exposes scipy.sparse.coo_matrix like the original package."""
+    """petls_pytorch exposes scipy.sparse.coo_matrix like the original package."""
     from scipy.sparse import coo_matrix as scipy_coo_matrix
 
-    assert petls_torch.coo_matrix is scipy_coo_matrix
+    assert petls_pytorch.coo_matrix is scipy_coo_matrix

@@ -1,4 +1,4 @@
-# PETLS-PyTorch
+# petls_pytorch
 
 A PyTorch-native implementation of persistent topological Laplacians, based on the
 public PETLS API, PETLS documentation, and the algorithms described in the
@@ -12,21 +12,21 @@ remains the reference for correctness.
 ## Quick Start
 
 ```python
-import petls_torch
+import petls_pytorch
 
 # Alpha complex from point cloud
-alpha = petls_torch.Alpha(points=[[0, 0], [1, 0], [0.5, 1]], max_dim=2)
+alpha = petls_pytorch.Alpha(points=[[0, 0], [1, 0], [0.5, 1]], max_dim=2)
 eigs = alpha.spectra(0, 0.0, 1.0)
 
 # Rips complex from distance matrix
-rips = petls_torch.Rips(distances=[[0, 1, 1], [1, 0, 1], [1, 1, 0]], max_dim=2)
+rips = petls_pytorch.Rips(distances=[[0, 1, 1], [1, 0, 1], [1, 1, 0]], max_dim=2)
 
 # Directed flag complex from .flag file
-dflag = petls_torch.dFlag("graph.flag", max_dim=3)
+dflag = petls_pytorch.dFlag("graph.flag", max_dim=3)
 
 # Sheaf Laplacian
-sst = petls_torch.sheaf_simplex_tree(st, extra_data, restriction)
-psl = petls_torch.PersistentSheafLaplacian(sst)
+sst = petls_pytorch.sheaf_simplex_tree(st, extra_data, restriction)
+psl = petls_pytorch.PersistentSheafLaplacian(sst)
 filtrations = psl.get_all_filtrations()
 sheaf_eigs = psl.spectra(dim=0, a=filtrations[0], b=filtrations[-1])
 ```
@@ -36,7 +36,7 @@ For `spectra(dim, a, b)`, choose `a` and `b` from the filtration values in
 
 ## Relationship to PETLS
 
-`petls_torch` is an independent PyTorch-native implementation of the PETLS
+`petls_pytorch` is an independent PyTorch-native implementation of the PETLS
 methods and public API behavior, with attribution to the original PETLS paper
 and project. Correctness tests compare against the original implementation using
 shared inputs and the default tolerances used in this repository.
@@ -92,7 +92,7 @@ not as a comprehensive performance study.
 
 The benchmark suite is a performance comparison against the reference PETLS
 implementation on identical synthetic inputs. The shared runner is
-parameterized with `--package petls` or `--package petls_torch`.
+parameterized with `--package petls` or `--package petls_pytorch`.
 
 ### Hardware
 
@@ -108,8 +108,8 @@ per dataset.
 | Package | Device | Total Time | Mean Trial | Mean Build | Mean Eigs |
 |---------|--------|-----------:|-----------:|-----------:|----------:|
 | `petls` | CPU | 8.29 s | 172.6 ms | 15.2 ms | 157.4 ms |
-| `petls_torch` | CPU | 1.82 s | 37.9 ms | 4.8 ms | 33.1 ms |
-| `petls_torch` | CUDA | 1.85 s | 38.5 ms | 4.7 ms | 33.8 ms |
+| `petls_pytorch` | CPU | 1.82 s | 37.9 ms | 4.8 ms | 33.1 ms |
+| `petls_pytorch` | CUDA | 1.85 s | 38.5 ms | 4.7 ms | 33.8 ms |
 
 On this workload, the PyTorch implementation is about 4.5x faster than the
 reference PETLS run on the same CPU. The CUDA timing is similar to the CPU
@@ -123,7 +123,7 @@ Configuration: torus `n=500`, `max_dim=3`, 16 filtrations.
 | Package | Device | Total Time | Mean Trial | Max Matrix | Status |
 |---------|--------|-----------:|-----------:|-----------:|--------|
 | `petls` | CPU | > 300 s | unavailable | unavailable | Reached benchmark timeout |
-| `petls_torch` | CUDA | 8.80 s | 137.5 ms | 5990 x 5990 | Completed |
+| `petls_pytorch` | CUDA | 8.80 s | 137.5 ms | 5990 x 5990 | Completed |
 
 For this larger dense-eigendecomposition workload, the PyTorch/CUDA path
 completed within the benchmark timeout. The PETLS CPU run reached the configured
@@ -135,8 +135,8 @@ Quick preset timings:
 
 ```text
 petls (CPU)          : build=15.2 ms  eigs=157.4 ms
-petls_torch (CPU)    : build=4.8 ms   eigs=33.1 ms
-petls_torch (CUDA)   : build=4.7 ms   eigs=33.8 ms
+petls_pytorch (CPU)    : build=4.8 ms   eigs=33.1 ms
+petls_pytorch (CUDA)   : build=4.7 ms   eigs=33.8 ms
 ```
 
 In these measurements, most time is spent in eigendecomposition. The PyTorch
@@ -152,16 +152,16 @@ when benchmarking against the original PETLS package:
 # Original PETLS
 uv run --with petls python -m benchmark --preset quick --package petls --algorithm eigvalsh
 
-# PETLS-PyTorch on CUDA
-uv run python -m benchmark --preset quick --package petls_torch --algorithm eigvalsh --device cuda
+# petls_pytorch on CUDA
+uv run python -m benchmark --preset quick --package petls_pytorch --algorithm eigvalsh --device cuda
 
-# PETLS-PyTorch on CPU
-uv run python -m benchmark --preset quick --package petls_torch --algorithm eigvalsh --device cpu
+# petls_pytorch on CPU
+uv run python -m benchmark --preset quick --package petls_pytorch --algorithm eigvalsh --device cpu
 
 # Custom single run
 uv run python -m benchmark \
     --dataset torus --n_points 2000 --complex alpha --max_dim 3 \
-    --package petls_torch --algorithm eigvalsh
+    --package petls_pytorch --algorithm eigvalsh
 ```
 
 If you are not using `uv`, install from the source checkout first:
@@ -175,7 +175,7 @@ python -m benchmark --preset quick --package petls --algorithm eigvalsh
 ## Installation
 
 ```bash
-pip install petls-pytorch
+pip install petls_pytorch
 ```
 
 Requires CPython 3.10, 3.11, 3.12, 3.13, or 3.14.
@@ -221,14 +221,14 @@ I/O helpers.
 
 ## Citation
 
-If you use `petls_torch` in research, please cite both this PyTorch
+If you use `petls_pytorch` in research, please cite both this PyTorch
 implementation and the original PETLS paper.
 
-### PETLS-PyTorch
+### petls_pytorch
 
 ```bibtex
-@software{marston2026petlstorch,
-  title        = {PETLS-PyTorch: A PyTorch-native implementation of persistent topological Laplacians},
+@software{marston2026petlspytorch,
+  title        = {petls_pytorch: A PyTorch-native implementation of persistent topological Laplacians},
   author       = {Marston, Sumner K.},
   year         = {2026},
   publisher    = {Sylverity Research},

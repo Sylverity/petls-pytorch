@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from petls_torch.variants.dflag import _enumerate_directed_simplices, _read_flag_file
+from petls_pytorch.variants.dflag import _enumerate_directed_simplices, _read_flag_file
 
 
 def _bruteforce_directed_simplices(adj: np.ndarray, max_dim: int):

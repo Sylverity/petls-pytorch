@@ -104,7 +104,7 @@ class BenchmarkRunner:
         output_dir: str = "./benchmark_results",
         algorithm: str = "eigvalsh",
         device: str = "cpu",
-        package: str = "petls_torch",
+        package: str = "petls_pytorch",
         verbose: bool = True,
     ):
         self.output_dir = Path(output_dir)
@@ -177,7 +177,7 @@ class BenchmarkRunner:
             filtration_mode=filtration_mode,
             seed=seed,
             package=package,
-            device=self.device if package == "petls_torch" else None,
+            device=self.device if package == "petls_pytorch" else None,
         )
         t_build_complex = (time.perf_counter() - t0) * 1000
         if self.verbose:
@@ -308,7 +308,7 @@ def run_single_benchmark(
     max_dim: int = 3,
     num_filtrations: int = 20,
     algorithm: str = "eigvalsh",
-    package: str = "petls_torch",
+    package: str = "petls_pytorch",
     device: str = "cpu",
     output_dir: str = "./benchmark_results",
     seed: int = 42,

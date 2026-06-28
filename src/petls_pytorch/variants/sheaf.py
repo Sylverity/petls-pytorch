@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from scipy.sparse import coo_matrix
 
-from petls_torch.core.complex import Complex
+from petls_pytorch.core.complex import Complex
 
 if TYPE_CHECKING:
     import gudhi

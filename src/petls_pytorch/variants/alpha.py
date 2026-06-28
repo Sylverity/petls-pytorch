@@ -3,7 +3,7 @@ Alpha complex variant — PyTorch-native replacement for petls::Alpha.
 
 Constructs a simplicial complex from a point cloud using Gudhi's
 AlphaComplex, extracts boundary matrices and filtrations, and delegates
-all persistent-Laplacian computations to :class:`petls_torch.core.complex.Complex`.
+all persistent-Laplacian computations to :class:`petls_pytorch.core.complex.Complex`.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from petls_torch.core.complex import Complex
+from petls_pytorch.core.complex import Complex
 
 
 def _read_off_file(path: str) -> list[list[float]]:

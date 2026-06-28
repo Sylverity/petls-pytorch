@@ -4,7 +4,7 @@ Rips complex variant — PyTorch-native replacement for petls::Rips.
 Constructs a simplicial complex from a point cloud, distance matrix, or
 lower-triangular distance matrix file using Gudhi's RipsComplex, extracts
 boundary matrices and filtrations, and delegates all persistent-Laplacian
-computations to :class:`petls_torch.core.complex.Complex`.
+computations to :class:`petls_pytorch.core.complex.Complex`.
 """
 
 from __future__ import annotations
@@ -12,8 +12,8 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from petls_torch.core.complex import Complex
-from petls_torch.utils.simplex_tree import simplex_tree_boundaries_filtrations
+from petls_pytorch.core.complex import Complex
+from petls_pytorch.utils.simplex_tree import simplex_tree_boundaries_filtrations
 
 
 def _read_lower_distance_matrix(path: str) -> np.ndarray:

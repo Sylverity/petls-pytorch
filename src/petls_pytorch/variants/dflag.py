@@ -3,7 +3,7 @@ dFlag (directed flag complex) variant — PyTorch-native replacement for petls::
 
 Reads a weighted directed graph from a ``.flag`` file, enumerates the directed
 flag complex up to ``max_dim``, and delegates all persistent-Laplacian
-computations to :class:`petls_torch.core.complex.Complex`.
+computations to :class:`petls_pytorch.core.complex.Complex`.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from petls_torch.core.complex import Complex
+from petls_pytorch.core.complex import Complex
 
 
 def _read_flag_file(path: str) -> np.ndarray:

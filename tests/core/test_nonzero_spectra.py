@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from petls_torch.core.complex import Complex
+from petls_pytorch.core.complex import Complex
 
 
 def get_test_complex():

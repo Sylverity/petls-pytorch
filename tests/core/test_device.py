@@ -5,11 +5,11 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-import petls_torch._config as config
-from petls_torch.core.complex import Complex
-from petls_torch.core.filtered_boundary import FilteredBoundaryMatrix
-from petls_torch.variants.alpha import Alpha
-from petls_torch.variants.rips import Rips
+import petls_pytorch._config as config
+from petls_pytorch.core.complex import Complex
+from petls_pytorch.core.filtered_boundary import FilteredBoundaryMatrix
+from petls_pytorch.variants.alpha import Alpha
+from petls_pytorch.variants.rips import Rips
 
 
 def _assert_complex_on_device(pl, device: str) -> None:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import gudhi
 
-from petls_torch.core.complex import Complex
+from petls_pytorch.core.complex import Complex
 
 
 def test_simplex_tree_constructor():
