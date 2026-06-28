@@ -13,9 +13,8 @@ Key design decisions:
 from __future__ import annotations
 
 import torch
-from typing import Optional, Union
 
-from petls_torch._config import get_device, get_sparse_dtype
+from petls_torch._config import get_device
 
 
 class FilteredBoundaryMatrix:

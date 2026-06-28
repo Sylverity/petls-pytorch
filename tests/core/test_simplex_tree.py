@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import gudhi
-import numpy as np
 
 from petls_torch.core.complex import Complex
 

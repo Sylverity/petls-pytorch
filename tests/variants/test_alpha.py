@@ -10,7 +10,7 @@ import pytest
 import torch
 
 petls = pytest.importorskip("petls", reason="Reference PETLS not available")
-from petls_torch.variants.alpha import Alpha
+from petls_torch.variants.alpha import Alpha  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Tolerance
@@ -122,7 +122,6 @@ class TestAlphaSpectra:
         _compare_spectra(ref, test)
 
     def test_spectra_allpairs_vs_reference(self, ref_alpha_points, torch_alpha_points):
-        ref = _extract_spectra(ref_alpha_points)
         # allpairs=True for reference doesn't work the same way (C++ method),
         # so we just verify our allpairs produces a superset.
         test_all = torch_alpha_points.spectra(allpairs=True)

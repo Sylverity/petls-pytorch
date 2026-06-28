@@ -59,6 +59,26 @@ implementation is included in this repository.
 | `store_L()`, `store_spectra()`, `store_spectra_summary()` | Same | Implemented |
 | `time_to_csv()` | `time_to_csv()` | Implemented |
 
+## Directed Flag Files
+
+`dFlag` reads weighted directed graphs from `.flag` files with a `dim 0`
+vertex-weight section and an optional `dim 1` directed-edge section:
+
+```text
+dim 0
+0.0 0.0 0.0 0.0
+dim 1
+0 1 1.25
+1 2 2.50
+0 2 3.00
+```
+
+The `dim 0` line after the header contains one whitespace-separated vertex
+weight per vertex. Each `dim 1` row is `source target weight`, using zero-based
+vertex indices. Missing directed edges are absent from the file; self-loops are
+not supported. Filtration values for higher-dimensional directed simplices are
+the maximum edge weight in each simplex.
+
 ## Benchmark Notes
 
 The benchmark results below are included to give a sense of current runtime
@@ -149,7 +169,6 @@ Dependencies:
 - `numpy`
 - `scipy`
 - `gudhi`
-- `pyflagser`
 - `tadasets` for benchmarks
 
 ## Test Suite

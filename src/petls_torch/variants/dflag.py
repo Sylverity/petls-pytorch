@@ -8,6 +8,8 @@ computations to :class:`petls_torch.core.complex.Complex`.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import torch
 
@@ -15,20 +17,64 @@ from petls_torch.core.complex import Complex
 
 
 def _read_flag_file(path: str) -> np.ndarray:
-    """Parse a flagser ``.flag`` file and return a dense weighted adjacency matrix.
+    """Parse a weighted ``.flag`` file and return a dense adjacency matrix.
 
     Diagonal entries store vertex weights; off-diagonal entries store directed
     edge weights. Missing edges are represented by ``0``.
     """
+    lines = []
+    for raw_line in Path(path).read_text().splitlines():
+        line = raw_line.split("#", maxsplit=1)[0].strip()
+        if line:
+            lines.append(line)
+
+    if len(lines) < 2:
+        raise ValueError(".flag file must contain a 'dim 0' header and vertex weights")
+
+    if not _is_dim_header(lines[0], 0):
+        raise ValueError(".flag file must start with a 'dim 0' header")
+
     try:
-        from pyflagser.flagio import load_weighted_flag
-        adj = load_weighted_flag(path)
-        return adj.toarray()
-    except ImportError as exc:
-        raise ImportError(
-            "pyflagser is required for dFlag complex construction. "
-            "Install it with: pip install pyflagser"
-        ) from exc
+        vertices = [float(x) for x in lines[1].split()]
+    except ValueError as exc:
+        raise ValueError("Invalid vertex weights in .flag file") from exc
+
+    if not vertices:
+        raise ValueError(".flag file must contain at least one vertex weight")
+
+    adj = np.zeros((len(vertices), len(vertices)), dtype=np.float64)
+    np.fill_diagonal(adj, vertices)
+
+    if len(lines) == 2:
+        return adj
+    if not _is_dim_header(lines[2], 1):
+        raise ValueError(".flag edge list must be preceded by a 'dim 1' header")
+
+    for line_number, line in enumerate(lines[3:], start=4):
+        parts = line.split()
+        if len(parts) != 3:
+            raise ValueError(
+                f"Invalid .flag edge on line {line_number}: expected 'source target weight'"
+            )
+        try:
+            src = int(parts[0])
+            dst = int(parts[1])
+            weight = float(parts[2])
+        except ValueError as exc:
+            raise ValueError(f"Invalid .flag edge on line {line_number}") from exc
+        if src == dst:
+            raise ValueError(f"Self-loops are not supported in .flag files: line {line_number}")
+        if src < 0 or src >= len(vertices) or dst < 0 or dst >= len(vertices):
+            raise ValueError(f".flag edge endpoint out of range on line {line_number}")
+        adj[src, dst] = weight
+
+    return adj
+
+
+def _is_dim_header(line: str, dim: int) -> bool:
+    """Return whether *line* is a flagser-style dimension header."""
+    normalized = line.lower().replace(" ", "")
+    return normalized == f"dim{dim}"
 
 
 def _enumerate_directed_simplices(adj: np.ndarray, max_dim: int):
@@ -57,44 +103,42 @@ def _enumerate_directed_simplices(adj: np.ndarray, max_dim: int):
         simplices[0].append((v,))
         filtrations[0].append(float(np.float32(adj[v, v])))
 
-    # Higher dimensions — brute-force enumeration (sufficient for small test graphs)
+    out_neighbors = {
+        v: {
+            w: float(np.float32(adj[v, w]))
+            for w in range(n)
+            if v != w and adj[v, w] > 0 and adj[v, w] != np.inf
+        }
+        for v in range(n)
+    }
+
+    def expand(simplex: tuple[int, ...], candidates: set[int], max_weight: float) -> None:
+        simplex_dim = len(simplex) - 1
+        if simplex_dim > max_dim:
+            return
+        if simplex_dim > 0:
+            simplices[simplex_dim].append(simplex)
+            filtrations[simplex_dim].append(max_weight)
+        if simplex_dim == max_dim:
+            return
+
+        used = set(simplex)
+        for vertex in sorted(candidates):
+            if vertex in used:
+                continue
+            edge_weights = [out_neighbors[existing][vertex] for existing in simplex]
+            next_weight = max(max_weight, *edge_weights)
+            next_candidates = candidates.intersection(out_neighbors[vertex]).difference(used)
+            next_candidates.discard(vertex)
+            expand((*simplex, vertex), next_candidates, next_weight)
+
+    for v in range(n):
+        expand((v,), set(out_neighbors[v]), 0.0)
+
     for dim in range(1, max_dim + 1):
-        # Enumerate all ordered (dim+1)-tuples of distinct vertices
-        # and keep those that form a directed simplex.
-        seen = set()
-        for code in range(n ** (dim + 1)):
-            tup = []
-            tmp = code
-            for _ in range(dim + 1):
-                tup.append(tmp % n)
-                tmp //= n
-            tup = tuple(tup)
-
-            if len(set(tup)) != dim + 1:
-                continue
-            if tup in seen:
-                continue
-
-            valid = True
-            max_weight = 0.0
-            for i in range(dim + 1):
-                for j in range(i + 1, dim + 1):
-                    w = adj[tup[i], tup[j]]
-                    if w <= 0 or w == np.inf:
-                        valid = False
-                        break
-                    max_weight = max(max_weight, float(np.float32(w)))
-                if not valid:
-                    break
-
-            if valid:
-                seen.add(tup)
-                simplices[dim].append(tup)
-                filtrations[dim].append(max_weight)
-
-        # Sort by filtration value (ties broken by original enumeration order)
+        # Sort by filtration value (ties broken by the old brute-force scan order)
         indexed = list(enumerate(zip(simplices[dim], filtrations[dim])))
-        indexed.sort(key=lambda x: (x[1][1], x[0]))
+        indexed.sort(key=lambda x: (x[1][1], _bruteforce_rank(x[1][0], n)))
         simplices[dim] = [s for _, (s, _) in indexed]
         filtrations[dim] = [f for _, (_, f) in indexed]
 
@@ -105,6 +149,11 @@ def _enumerate_directed_simplices(adj: np.ndarray, max_dim: int):
     filtrations[0] = [f for _, (_, f) in indexed]
 
     return simplices, filtrations
+
+
+def _bruteforce_rank(simplex: tuple[int, ...], n_vertices: int) -> int:
+    """Tie-break key matching the previous base-n tuple scan order."""
+    return sum(vertex * (n_vertices ** index) for index, vertex in enumerate(simplex))
 
 
 def _build_boundaries(simplices):
@@ -146,10 +195,9 @@ class dFlag(Complex):
     device : torch.device, optional
         Override global compute device.
 
-    Raises
-    ------
-    ImportError
-        If ``pyflagser`` is not installed.
+    The supported ``.flag`` format has a ``dim 0`` section containing one
+    whitespace-separated vertex weight per vertex, followed by an optional
+    ``dim 1`` section containing ``source target weight`` directed edges.
     """
 
     def __init__(

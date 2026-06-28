@@ -6,7 +6,6 @@ from math import sqrt
 
 import gudhi
 import numpy as np
-import pytest
 
 from petls_torch.variants.sheaf import sheaf_simplex_tree, PersistentSheafLaplacian
 

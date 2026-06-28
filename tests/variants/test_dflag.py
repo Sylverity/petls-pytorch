@@ -13,7 +13,7 @@ import pytest
 import torch
 
 petls = pytest.importorskip("petls", reason="Reference PETLS not available")
-from petls_torch.variants.dflag import dFlag
+from petls_torch.variants.dflag import dFlag  # noqa: E402
 
 ATOL = 1e-4
 RTOL = 1e-3

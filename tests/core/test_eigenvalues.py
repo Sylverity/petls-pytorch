@@ -7,7 +7,6 @@ using torch.linalg.eigvalsh (GPU-accelerated via cuSOLVER).
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 import torch
 
@@ -89,8 +88,8 @@ def test_eigenpairs_basic():
     assert_tensors_close(vals, expected)
 
     # Check orthonormality
-    I = vecs.T @ vecs
-    assert_tensors_close(I, torch.eye(3))
+    identity = vecs.T @ vecs
+    assert_tensors_close(identity, torch.eye(3))
 
 
 # ---------------------------------------------------------------------------
