@@ -145,21 +145,31 @@ from CUDA support on larger matrix workloads.
 
 ## Running Benchmarks
 
+From a source checkout, run the benchmark module with `uv`. Add `--with petls`
+when benchmarking against the original PETLS package:
+
 ```bash
 # Original PETLS
-cd /path/to/workspace
-python -m benchmark --preset quick --package petls --algorithm eigvalsh
+uv run --with petls python -m benchmark --preset quick --package petls --algorithm eigvalsh
 
 # PETLS-PyTorch on CUDA
-python -m benchmark --preset quick --package petls_torch --algorithm eigvalsh --device cuda
+uv run python -m benchmark --preset quick --package petls_torch --algorithm eigvalsh --device cuda
 
 # PETLS-PyTorch on CPU
-python -m benchmark --preset quick --package petls_torch --algorithm eigvalsh --device cpu
+uv run python -m benchmark --preset quick --package petls_torch --algorithm eigvalsh --device cpu
 
 # Custom single run
-python -m benchmark \
+uv run python -m benchmark \
     --dataset torus --n_points 2000 --complex alpha --max_dim 3 \
     --package petls_torch --algorithm eigvalsh
+```
+
+If you are not using `uv`, install from the source checkout first:
+
+```bash
+python -m pip install -e .
+python -m pip install petls  # only needed for --package petls
+python -m benchmark --preset quick --package petls --algorithm eigvalsh
 ```
 
 ## Installation
@@ -182,13 +192,32 @@ Dependencies:
 
 ## Test Suite
 
+From a source checkout, run the default test suite with development
+dependencies:
+
 ```bash
-cd PETLS-PYTORCH
+uv run --extra dev pytest tests/ -v
+```
+
+By default, tests that compare against the original PETLS package are skipped
+when `petls` is not installed. To run the full parity suite against the
+reference implementation:
+
+```bash
+uv run --extra dev --with petls pytest tests/ -v
+```
+
+If you are not using `uv`, install the package and test dependencies first:
+
+```bash
+python -m pip install -e ".[dev]"
+python -m pip install petls  # only needed for the full parity suite
 pytest tests/ -v
 ```
 
-The test suite covers core functionality, Rips complexes, alpha complexes,
-directed flag complexes, sheaf support, eigenvalue utilities, and I/O helpers.
+The full parity suite covers core functionality, Rips complexes, alpha
+complexes, directed flag complexes, sheaf support, eigenvalue utilities, and
+I/O helpers.
 
 ## Citation
 
