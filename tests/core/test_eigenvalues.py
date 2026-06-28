@@ -99,6 +99,7 @@ def test_eigenpairs_basic():
 
 def test_custom_algorithm():
     """Pass a custom callable as algorithm."""
+
     def custom_solver(L: torch.Tensor) -> torch.Tensor:
         return torch.linalg.eigvalsh(L) * 2  # nonsense but testable
 

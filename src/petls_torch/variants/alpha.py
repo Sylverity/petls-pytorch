@@ -1,7 +1,7 @@
 """
 Alpha complex variant — PyTorch-native replacement for petls::Alpha.
 
-Constructs a simplicial complex from a 3-D point cloud using Gudhi's
+Constructs a simplicial complex from a point cloud using Gudhi's
 AlphaComplex, extracts boundary matrices and filtrations, and delegates
 all persistent-Laplacian computations to :class:`petls_torch.core.complex.Complex`.
 """
@@ -22,6 +22,7 @@ def _read_off_file(path: str) -> list[list[float]]:
     """
     try:
         import gudhi
+
         points = gudhi.read_points_from_off_file(path)
         # Gudhi returns list of tuples; normalise to list of lists
         return [list(p) for p in points]
@@ -79,9 +80,7 @@ def _simplex_tree_boundaries_filtrations(simplex_tree):
         # Match C++ sign convention: sign = 1 - 2*(dim % 2), alternating.
         sign = 1 - 2 * (dim % 2)
         for face, _ in simplex_tree.get_boundaries(simplex):
-            boundaries_triples[dim].append(
-                [indices[tuple(face)], indices[tuple(simplex)], sign]
-            )
+            boundaries_triples[dim].append([indices[tuple(face)], indices[tuple(simplex)], sign])
             sign = -sign
 
     # 3. Re-index to dimension-local indices [0 .. N_dim-1].
@@ -119,7 +118,7 @@ def _simplex_tree_boundaries_filtrations(simplex_tree):
 
 
 class Alpha(Complex):
-    """Alpha complex from a 3-D point cloud, using Gudhi's AlphaComplex.
+    """Alpha complex from a point cloud, using Gudhi's AlphaComplex.
 
     This is a drop-in PyTorch replacement for ``petls.Alpha``.
 
@@ -128,7 +127,8 @@ class Alpha(Complex):
     filename : str, optional
         Path to an OFF file containing the point cloud.
     points : list[list[float]], optional
-        List of 3-D point coordinates ``[[x, y, z], ...]``.
+        List of point coordinates such as ``[[x, y], ...]`` or
+        ``[[x, y, z], ...]``.
     max_dim : int, optional
         Maximum simplex dimension to retain (default 3).
     device : torch.device, optional

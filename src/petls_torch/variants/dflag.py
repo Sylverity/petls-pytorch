@@ -153,7 +153,7 @@ def _enumerate_directed_simplices(adj: np.ndarray, max_dim: int):
 
 def _bruteforce_rank(simplex: tuple[int, ...], n_vertices: int) -> int:
     """Tie-break key matching the previous base-n tuple scan order."""
-    return sum(vertex * (n_vertices ** index) for index, vertex in enumerate(simplex))
+    return sum(vertex * (n_vertices**index) for index, vertex in enumerate(simplex))
 
 
 def _build_boundaries(simplices):

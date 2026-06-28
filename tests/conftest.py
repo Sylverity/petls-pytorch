@@ -46,12 +46,8 @@ def reference_petls():
 @pytest.fixture
 def small_boundaries():
     """Exact boundary matrices from PETLS tests/core/test_base.py::get_pl()."""
-    d1 = np.array([[-1, 0, -1],
-                   [1, -1, 0],
-                   [0, 1, 1]], dtype=np.float32)
-    d2 = np.array([[1],
-                   [1],
-                   [-1]], dtype=np.float32)
+    d1 = np.array([[-1, 0, -1], [1, -1, 0], [0, 1, 1]], dtype=np.float32)
+    d2 = np.array([[1], [1], [-1]], dtype=np.float32)
     return [d1, d2]
 
 
@@ -59,9 +55,9 @@ def small_boundaries():
 def small_filtrations():
     """Exact filtrations from PETLS tests/core/test_base.py::get_pl()."""
     return [
-        [0.0, 1.0, 2.0],      # dim 0 (vertices)
-        [3.0, 4.0, 5.0],      # dim 1 (edges)
-        [5.0],                # dim 2 (triangle)
+        [0.0, 1.0, 2.0],  # dim 0 (vertices)
+        [3.0, 4.0, 5.0],  # dim 1 (edges)
+        [5.0],  # dim 2 (triangle)
     ]
 
 

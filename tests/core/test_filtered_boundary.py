@@ -123,11 +123,13 @@ def test_submatrix_at_filtration_exact():
     assert sub.shape == (3, 3)
 
     dense = sub.to_dense()
-    expected = torch.tensor([
-        [1.0, 0.0, 0.0],
-        [2.0, 0.0, 0.0],
-        [0.0, 3.0, 0.0],
-    ])
+    expected = torch.tensor(
+        [
+            [1.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0],
+            [0.0, 3.0, 0.0],
+        ]
+    )
     assert_tensors_close(dense, expected)
 
 

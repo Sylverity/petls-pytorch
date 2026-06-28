@@ -20,8 +20,10 @@ import numpy as np
 
 try:
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+
     HAS_MPL = True
 except ImportError:
     HAS_MPL = False
@@ -57,7 +59,10 @@ def print_table(title: str, headers: List[str], rows: List[List]):
     print(f"\n{title}")
     print("-" * (sum(len(str(h)) for h in headers) + 4 * len(headers)))
     # Compute column widths
-    widths = [max(len(str(h)), max((len(str(r[i])) for r in rows), default=0)) for i, h in enumerate(headers)]
+    widths = [
+        max(len(str(h)), max((len(str(r[i])) for r in rows), default=0))
+        for i, h in enumerate(headers)
+    ]
     header_str = " | ".join(h.ljust(w) for h, w in zip(headers, widths))
     print(header_str)
     print("-" * len(header_str))
@@ -87,45 +92,63 @@ def analyze_file(path: str, plot_dir: Optional[str] = None) -> Dict:
         "mean_matrix": int(np.mean(sizes)),
     }
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  Analysis: {overall['file']}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"  Trials:       {overall['trials']}")
     print(f"  Total time:   {overall['total_time_sec']:.2f} s")
     print(f"  Max matrix:   {overall['max_matrix']} x {overall['max_matrix']}")
     print(f"  Mean matrix:  {overall['mean_matrix']} x {overall['mean_matrix']}")
 
     # Stats by dimension
-    dim_headers = ["Dim", "Trials", "Max Size", "Mean Size", "Mean Build (ms)", "Mean Eigs (ms)", "Mean Total (ms)"]
+    dim_headers = [
+        "Dim",
+        "Trials",
+        "Max Size",
+        "Mean Size",
+        "Mean Build (ms)",
+        "Mean Eigs (ms)",
+        "Mean Total (ms)",
+    ]
     dim_rows = []
     for d in sorted(np.unique(dims)):
         mask = dims == d
-        dim_rows.append([
-            d,
-            int(mask.sum()),
-            int(np.max(sizes[mask])),
-            int(np.mean(sizes[mask])),
-            f"{np.mean(build[mask]):.1f}",
-            f"{np.mean(eigs[mask]):.1f}",
-            f"{np.mean(total[mask]):.1f}",
-        ])
+        dim_rows.append(
+            [
+                d,
+                int(mask.sum()),
+                int(np.max(sizes[mask])),
+                int(np.mean(sizes[mask])),
+                f"{np.mean(build[mask]):.1f}",
+                f"{np.mean(eigs[mask]):.1f}",
+                f"{np.mean(total[mask]):.1f}",
+            ]
+        )
     print_table("By Dimension", dim_headers, dim_rows)
 
     # Size bucket analysis
     buckets = [(0, 500), (500, 1500), (1500, 3000), (3000, 6000), (6000, 12000), (12000, 999999)]
-    bucket_headers = ["Size Range", "Trials", "Mean Build (ms)", "Mean Eigs (ms)", "Mean Total (ms)"]
+    bucket_headers = [
+        "Size Range",
+        "Trials",
+        "Mean Build (ms)",
+        "Mean Eigs (ms)",
+        "Mean Total (ms)",
+    ]
     bucket_rows = []
     for lo, hi in buckets:
         mask = (sizes >= lo) & (sizes < hi)
         if not mask.any():
             continue
-        bucket_rows.append([
-            f"{lo}-{hi}",
-            int(mask.sum()),
-            f"{np.mean(build[mask]):.1f}",
-            f"{np.mean(eigs[mask]):.1f}",
-            f"{np.mean(total[mask]):.1f}",
-        ])
+        bucket_rows.append(
+            [
+                f"{lo}-{hi}",
+                int(mask.sum()),
+                f"{np.mean(build[mask]):.1f}",
+                f"{np.mean(eigs[mask]):.1f}",
+                f"{np.mean(total[mask]):.1f}",
+            ]
+        )
     print_table("By Matrix Size Bucket", bucket_headers, bucket_rows)
 
     # Scaling fit: time ~ n^p
@@ -144,7 +167,7 @@ def analyze_file(path: str, plot_dir: Optional[str] = None) -> Dict:
     print(f"    Build: {p_build:.2f}")
     print(f"    Eigs:  {p_eigs:.2f}")
     print(f"    Total: {p_total:.2f}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     # Plots
     if HAS_MPL and plot_dir:
@@ -157,7 +180,14 @@ def analyze_file(path: str, plot_dir: Optional[str] = None) -> Dict:
         colors = {0: "tab:blue", 1: "tab:green", 2: "tab:orange", 3: "tab:red"}
         for d in sorted(np.unique(dims)):
             mask = dims == d
-            ax.scatter(sizes[mask], total[mask], s=20, alpha=0.6, color=colors.get(d, "gray"), label=f"dim={d}")
+            ax.scatter(
+                sizes[mask],
+                total[mask],
+                s=20,
+                alpha=0.6,
+                color=colors.get(d, "gray"),
+                label=f"dim={d}",
+            )
         ax.set_xlabel("Matrix size (n)")
         ax.set_ylabel("Total time (ms)")
         ax.set_title(f"{stem} — Total time vs matrix size")
@@ -206,7 +236,9 @@ def main():
     parser = argparse.ArgumentParser(description="Analyze PETLS benchmark results")
     parser.add_argument("files", nargs="*", help="CSV result files to analyze")
     parser.add_argument("--dir", type=str, help="Directory containing CSV files")
-    parser.add_argument("--plot_dir", type=str, default="./benchmark_plots", help="Where to save plots")
+    parser.add_argument(
+        "--plot_dir", type=str, default="./benchmark_plots", help="Where to save plots"
+    )
     args = parser.parse_args()
 
     files = []
@@ -230,16 +262,19 @@ def main():
         summaries.append(analyze_file(f, plot_dir=args.plot_dir))
 
     if len(summaries) > 1:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("  Multi-file summary")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         for s in summaries:
-            print(f"  {s['file']:40s} | {s['trials']:4d} trials | {s['total_time_sec']:8.1f}s | max={s['max_matrix']:6d}")
-        print(f"{'='*60}\n")
+            print(
+                f"  {s['file']:40s} | {s['trials']:4d} trials | {s['total_time_sec']:8.1f}s | max={s['max_matrix']:6d}"
+            )
+        print(f"{'=' * 60}\n")
 
     return 0
 
 
 if __name__ == "__main__":
     import sys
+
     sys.exit(main())

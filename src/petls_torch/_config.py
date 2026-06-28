@@ -15,6 +15,7 @@ _DEFAULT_SPARSE_DTYPE: torch.dtype = torch.float32
 _ATOL: float = 1e-4
 _RTOL: float = 1e-3
 
+
 def get_device() -> torch.device:
     """Return the current default compute device."""
     return _DEFAULT_DEVICE

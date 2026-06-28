@@ -84,7 +84,9 @@ def generate_point_cloud(name: str, n: int, seed: int = 42) -> np.ndarray:
         raise ValueError(f"Unknown generator '{gen}'")
 
 
-def choose_filtrations(filtrations: List[float], num_samples: int, mode: str = "quantile") -> List[float]:
+def choose_filtrations(
+    filtrations: List[float], num_samples: int, mode: str = "quantile"
+) -> List[float]:
     """
     Select a sparse set of filtration values from the full list.
 
@@ -169,6 +171,7 @@ def generate_dataset(
     elif complex_type.lower() == "rips":
         # For Rips we need a threshold; set it to cover the diameter
         from scipy.spatial.distance import pdist
+
         diam = pdist(points).max() * 1.1
         complex_obj = Rips(points=points.tolist(), max_dim=max_dim, threshold=float(diam))
     else:
@@ -183,17 +186,21 @@ def generate_dataset(
         for dim in range(max_dim + 1):
             try:
                 L = complex_obj.get_L(dim, f, f)
-                matrix_stats.append({
-                    "filtration": float(f),
-                    "dim": dim,
-                    "rows": int(L.shape[0]),
-                })
+                matrix_stats.append(
+                    {
+                        "filtration": float(f),
+                        "dim": dim,
+                        "rows": int(L.shape[0]),
+                    }
+                )
             except Exception:
-                matrix_stats.append({
-                    "filtration": float(f),
-                    "dim": dim,
-                    "rows": 0,
-                })
+                matrix_stats.append(
+                    {
+                        "filtration": float(f),
+                        "dim": dim,
+                        "rows": 0,
+                    }
+                )
 
     result = {
         "name": name,

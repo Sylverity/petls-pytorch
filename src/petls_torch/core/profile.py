@@ -132,15 +132,17 @@ class Profile:
         """Write profile to CSV."""
         import pandas as pd
 
-        df = pd.DataFrame({
-            "dim": self.dims,
-            "filtration_a": self.filtration_a,
-            "filtration_b": self.filtration_b,
-            "duration_all": self.durations_all,
-            "duration_eigs": self.durations_eigs,
-            "duration_L": self.durations_L,
-            "L_rows": self.L_rows,
-            "betti": self.bettis,
-            "lambda": self.lambdas,
-        })
+        df = pd.DataFrame(
+            {
+                "dim": self.dims,
+                "filtration_a": self.filtration_a,
+                "filtration_b": self.filtration_b,
+                "duration_all": self.durations_all,
+                "duration_eigs": self.durations_eigs,
+                "duration_L": self.durations_L,
+                "L_rows": self.L_rows,
+                "betti": self.bettis,
+                "lambda": self.lambdas,
+            }
+        )
         df.to_csv(filename, index=False)

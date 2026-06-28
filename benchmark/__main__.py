@@ -25,34 +25,116 @@ PRESETS = {
     "quick": {
         "name": "quick_smoke",
         "configs": [
-            {"dataset_name": "torus",   "n_points": 500,  "complex_type": "alpha", "max_dim": 2, "num_filtrations": 8},
-            {"dataset_name": "sphere",  "n_points": 300,  "complex_type": "alpha", "max_dim": 2, "num_filtrations": 8},
+            {
+                "dataset_name": "torus",
+                "n_points": 500,
+                "complex_type": "alpha",
+                "max_dim": 2,
+                "num_filtrations": 8,
+            },
+            {
+                "dataset_name": "sphere",
+                "n_points": 300,
+                "complex_type": "alpha",
+                "max_dim": 2,
+                "num_filtrations": 8,
+            },
         ],
     },
     "standard": {
         "name": "standard",
         "configs": [
-            {"dataset_name": "torus",        "n_points": 2000, "complex_type": "alpha", "max_dim": 3, "num_filtrations": 16},
-            {"dataset_name": "sphere",       "n_points": 1500, "complex_type": "alpha", "max_dim": 3, "num_filtrations": 16},
-            {"dataset_name": "swiss_roll",   "n_points": 2000, "complex_type": "alpha", "max_dim": 3, "num_filtrations": 16},
+            {
+                "dataset_name": "torus",
+                "n_points": 2000,
+                "complex_type": "alpha",
+                "max_dim": 3,
+                "num_filtrations": 16,
+            },
+            {
+                "dataset_name": "sphere",
+                "n_points": 1500,
+                "complex_type": "alpha",
+                "max_dim": 3,
+                "num_filtrations": 16,
+            },
+            {
+                "dataset_name": "swiss_roll",
+                "n_points": 2000,
+                "complex_type": "alpha",
+                "max_dim": 3,
+                "num_filtrations": 16,
+            },
         ],
     },
     "intensive": {
         "name": "intensive",
         "configs": [
-            {"dataset_name": "torus",        "n_points": 5000, "complex_type": "alpha", "max_dim": 3, "num_filtrations": 24},
-            {"dataset_name": "sphere",       "n_points": 5000, "complex_type": "alpha", "max_dim": 3, "num_filtrations": 24},
-            {"dataset_name": "swiss_roll",   "n_points": 5000, "complex_type": "alpha", "max_dim": 3, "num_filtrations": 24},
-            {"dataset_name": "klein_bottle", "n_points": 3000, "complex_type": "alpha", "max_dim": 3, "num_filtrations": 24},
+            {
+                "dataset_name": "torus",
+                "n_points": 5000,
+                "complex_type": "alpha",
+                "max_dim": 3,
+                "num_filtrations": 24,
+            },
+            {
+                "dataset_name": "sphere",
+                "n_points": 5000,
+                "complex_type": "alpha",
+                "max_dim": 3,
+                "num_filtrations": 24,
+            },
+            {
+                "dataset_name": "swiss_roll",
+                "n_points": 5000,
+                "complex_type": "alpha",
+                "max_dim": 3,
+                "num_filtrations": 24,
+            },
+            {
+                "dataset_name": "klein_bottle",
+                "n_points": 3000,
+                "complex_type": "alpha",
+                "max_dim": 3,
+                "num_filtrations": 24,
+            },
         ],
     },
     "extreme": {
         "name": "extreme",
         "configs": [
-            {"dataset_name": "torus",        "n_points": 8000, "complex_type": "alpha", "max_dim": 3, "num_filtrations": 32, "filtration_mode": "early"},
-            {"dataset_name": "sphere",       "n_points": 8000, "complex_type": "alpha", "max_dim": 3, "num_filtrations": 32, "filtration_mode": "early"},
-            {"dataset_name": "swiss_roll",   "n_points": 8000, "complex_type": "alpha", "max_dim": 3, "num_filtrations": 32, "filtration_mode": "early"},
-            {"dataset_name": "torus",        "n_points": 3000, "complex_type": "rips",  "max_dim": 3, "num_filtrations": 20, "filtration_mode": "quantile"},
+            {
+                "dataset_name": "torus",
+                "n_points": 8000,
+                "complex_type": "alpha",
+                "max_dim": 3,
+                "num_filtrations": 32,
+                "filtration_mode": "early",
+            },
+            {
+                "dataset_name": "sphere",
+                "n_points": 8000,
+                "complex_type": "alpha",
+                "max_dim": 3,
+                "num_filtrations": 32,
+                "filtration_mode": "early",
+            },
+            {
+                "dataset_name": "swiss_roll",
+                "n_points": 8000,
+                "complex_type": "alpha",
+                "max_dim": 3,
+                "num_filtrations": 32,
+                "filtration_mode": "early",
+            },
+            {
+                "dataset_name": "torus",
+                "n_points": 3000,
+                "complex_type": "rips",
+                "max_dim": 3,
+                "num_filtrations": 20,
+                "filtration_mode": "quantile",
+            },
         ],
     },
 }
@@ -63,8 +145,8 @@ def main():
         description="Performance comparison against the reference PETLS implementation",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"""
-Available datasets: {', '.join(list_datasets())}
-Available presets:  {', '.join(PRESETS.keys())}
+Available datasets: {", ".join(list_datasets())}
+Available presets:  {", ".join(PRESETS.keys())}
 
 Examples:
   # Quick smoke test
@@ -80,33 +162,62 @@ Examples:
   python -m benchmark --dataset torus --n_points 5000 --complex alpha --max_dim 3 --package petls_torch
 """,
     )
-    parser.add_argument("--preset", type=str, choices=list(PRESETS.keys()),
-                        help="Run a predefined benchmark preset")
-    parser.add_argument("--dataset", type=str, choices=list_datasets(),
-                        help="Dataset name (overrides preset)")
-    parser.add_argument("--n_points", type=int, default=2000,
-                        help="Number of points (default: 2000)")
-    parser.add_argument("--complex", type=str, choices=["alpha", "rips"], default="alpha",
-                        help="Complex type (default: alpha)")
-    parser.add_argument("--max_dim", type=int, default=3,
-                        help="Maximum simplicial dimension (default: 3)")
-    parser.add_argument("--num_filtrations", type=int, default=20,
-                        help="Number of sampled filtrations (default: 20)")
-    parser.add_argument("--filtration_mode", type=str, choices=["quantile", "log", "early"],
-                        default="quantile", help="Filtration sampling strategy")
-    parser.add_argument("--algorithm", type=str, default="eigvalsh",
-                        help="Eigenvalue algorithm (eigvalsh, selfadjoint, spectra, etc.)")
-    parser.add_argument("--package", type=str, choices=["petls", "petls_torch"],
-                        default="petls_torch",
-                        help="Backend package to benchmark (default: petls_torch)")
-    parser.add_argument("--output_dir", type=str, default="./benchmark_results",
-                        help="Directory to write results")
-    parser.add_argument("--device", type=str, default="cpu",
-                        help="Device label for result tracking (cpu, cuda, etc.)")
-    parser.add_argument("--seed", type=int, default=42,
-                        help="Random seed")
-    parser.add_argument("--list", action="store_true",
-                        help="List available datasets and presets")
+    parser.add_argument(
+        "--preset", type=str, choices=list(PRESETS.keys()), help="Run a predefined benchmark preset"
+    )
+    parser.add_argument(
+        "--dataset", type=str, choices=list_datasets(), help="Dataset name (overrides preset)"
+    )
+    parser.add_argument(
+        "--n_points", type=int, default=2000, help="Number of points (default: 2000)"
+    )
+    parser.add_argument(
+        "--complex",
+        type=str,
+        choices=["alpha", "rips"],
+        default="alpha",
+        help="Complex type (default: alpha)",
+    )
+    parser.add_argument(
+        "--max_dim", type=int, default=3, help="Maximum simplicial dimension (default: 3)"
+    )
+    parser.add_argument(
+        "--num_filtrations",
+        type=int,
+        default=20,
+        help="Number of sampled filtrations (default: 20)",
+    )
+    parser.add_argument(
+        "--filtration_mode",
+        type=str,
+        choices=["quantile", "log", "early"],
+        default="quantile",
+        help="Filtration sampling strategy",
+    )
+    parser.add_argument(
+        "--algorithm",
+        type=str,
+        default="eigvalsh",
+        help="Eigenvalue algorithm (eigvalsh, selfadjoint, spectra, etc.)",
+    )
+    parser.add_argument(
+        "--package",
+        type=str,
+        choices=["petls", "petls_torch"],
+        default="petls_torch",
+        help="Backend package to benchmark (default: petls_torch)",
+    )
+    parser.add_argument(
+        "--output_dir", type=str, default="./benchmark_results", help="Directory to write results"
+    )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cpu",
+        help="Device label for result tracking (cpu, cuda, etc.)",
+    )
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--list", action="store_true", help="List available datasets and presets")
 
     args = parser.parse_args()
 
@@ -129,13 +240,13 @@ Examples:
 
     if args.preset:
         preset = PRESETS[args.preset]
-        print(f"\n{'#'*60}")
+        print(f"\n{'#' * 60}")
         print(f"# Running preset: {args.preset}")
         print(f"# Package:        {args.package}")
         print(f"# Algorithm:      {args.algorithm}")
         print(f"# Device:         {args.device if args.package == 'petls_torch' else 'cpu'}")
         print(f"# Output:         {args.output_dir}")
-        print(f"{'#'*60}\n")
+        print(f"{'#' * 60}\n")
         runner.run_suite(name=f"{args.package}_{preset['name']}", configs=preset["configs"])
         print(f"\nResults written to: {Path(args.output_dir).resolve()}")
         return 0

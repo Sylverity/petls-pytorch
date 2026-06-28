@@ -37,18 +37,15 @@ class FilteredBoundaryMatrix:
         matrix: torch.Tensor,
         domain_filtrations: torch.Tensor,
         range_filtrations: torch.Tensor,
+        device: torch.device | str | None = None,
     ):
         if not matrix.is_sparse:
             raise ValueError("matrix must be a sparse tensor (COO or CSR)")
 
-        device = get_device()
-        self.matrix = matrix.to(device=device)
-        self.domain_filtrations = domain_filtrations.to(
-            device=device, dtype=torch.float64
-        )
-        self.range_filtrations = range_filtrations.to(
-            device=device, dtype=torch.float64
-        )
+        target_device = torch.device(device) if device is not None else get_device()
+        self.matrix = matrix.to(device=target_device)
+        self.domain_filtrations = domain_filtrations.to(device=target_device, dtype=torch.float64)
+        self.range_filtrations = range_filtrations.to(device=target_device, dtype=torch.float64)
 
         self.num_rows = self.range_filtrations.shape[0]
         self.num_cols = self.domain_filtrations.shape[0]
@@ -78,9 +75,7 @@ class FilteredBoundaryMatrix:
         idx = torch.searchsorted(filts, a, right=True).item()
         return int(idx) - 1
 
-    def submatrix_at_filtration(
-        self, a: float, return_coo: bool = True
-    ) -> torch.Tensor:
+    def submatrix_at_filtration(self, a: float, return_coo: bool = True) -> torch.Tensor:
         """
         Extract top-left submatrix where both row and col indices are <= a.
 
@@ -131,6 +126,7 @@ class FilteredBoundaryMatrix:
             matrix=self.matrix.t(),
             domain_filtrations=self.range_filtrations.clone(),
             range_filtrations=self.domain_filtrations.clone(),
+            device=self.device,
         )
 
     def __repr__(self) -> str:

@@ -64,6 +64,7 @@ class Complex:
 
         if simplex_tree is not None:
             from petls_torch.utils.simplex_tree import simplex_tree_boundaries_filtrations
+
             boundaries, filtrations = simplex_tree_boundaries_filtrations(simplex_tree)
 
         if boundaries is not None and filtrations is not None:
@@ -105,7 +106,7 @@ class Complex:
         """
         if len(filtrations) != len(boundaries) + 1:
             raise ValueError(
-                f"len(filtrations)={len(filtrations)} must be len(boundaries)+1={len(boundaries)+1}"
+                f"len(filtrations)={len(filtrations)} must be len(boundaries)+1={len(boundaries) + 1}"
             )
 
         self.filtered_boundaries = []
@@ -115,9 +116,7 @@ class Complex:
         # For vertex-only complexes, keep the real 0-simplex filtrations so
         # spectra() can report the correct Betti-0 multiplicity.
         if boundaries:
-            vertex_filtrations = torch.tensor(
-                [0.0], device=self.device, dtype=torch.float64
-            )
+            vertex_filtrations = torch.tensor([0.0], device=self.device, dtype=torch.float64)
         else:
             vertex_filtrations = torch.tensor(
                 filtrations[0], device=self.device, dtype=torch.float64
@@ -133,6 +132,7 @@ class Complex:
             matrix=dummy_mat,
             domain_filtrations=vertex_filtrations,
             range_filtrations=vertex_filtrations,
+            device=self.device,
         )
         self.filtered_boundaries.append(dummy)
 
@@ -145,17 +145,18 @@ class Complex:
 
             if B_t.shape[0] != len(f_rng):
                 raise ValueError(
-                    f"boundaries[{dim-1}].shape[0]={B_t.shape[0]} != len(filtrations[{dim-1}])={len(f_rng)}"
+                    f"boundaries[{dim - 1}].shape[0]={B_t.shape[0]} != len(filtrations[{dim - 1}])={len(f_rng)}"
                 )
             if B_t.shape[1] != len(f_dom):
                 raise ValueError(
-                    f"boundaries[{dim-1}].shape[1]={B_t.shape[1]} != len(filtrations[{dim}])={len(f_dom)}"
+                    f"boundaries[{dim - 1}].shape[1]={B_t.shape[1]} != len(filtrations[{dim}])={len(f_dom)}"
                 )
 
             fbm = FilteredBoundaryMatrix(
                 matrix=B_t,
                 domain_filtrations=domain_f,
                 range_filtrations=range_f,
+                device=self.device,
             )
             self.filtered_boundaries.append(fbm)
 
@@ -173,14 +174,14 @@ class Complex:
             return torch.from_numpy(x).to_sparse_coo()
         if scipy.sparse.issparse(x):
             coo = x.tocoo()
-            indices = torch.stack([
-                torch.from_numpy(coo.row).long(),
-                torch.from_numpy(coo.col).long(),
-            ])
-            values = torch.from_numpy(coo.data)
-            return torch.sparse_coo_tensor(
-                indices, values, size=coo.shape
+            indices = torch.stack(
+                [
+                    torch.from_numpy(coo.row).long(),
+                    torch.from_numpy(coo.col).long(),
+                ]
             )
+            values = torch.from_numpy(coo.data)
+            return torch.sparse_coo_tensor(indices, values, size=coo.shape)
         raise TypeError(f"Cannot convert type {type(x)} to sparse tensor")
 
     def set_eigs_algorithm(
@@ -220,6 +221,7 @@ class Complex:
     def get_L(self, dim: int, a: float, b: float) -> torch.Tensor:
         """Get persistent Laplacian matrix L^{dim}(a,b) as dense tensor."""
         from petls_torch.core.laplacian import get_L
+
         return get_L(dim, a, b, self.filtered_boundaries, self.top_dim, self.device)
 
     def get_L_top_dim_flipped(self, a: float) -> torch.Tensor:
@@ -242,6 +244,7 @@ class Complex:
     def get_up(self, dim: int, a: float, b: float) -> torch.Tensor:
         """Get persistent up-Laplacian."""
         from petls_torch.core.laplacian import get_up
+
         if dim >= self.top_dim:
             # No higher-dimensional simplices → zero matrix sized to dim-simplices at a
             if dim == 0 and len(self.filtered_boundaries) == 1:
@@ -256,6 +259,7 @@ class Complex:
     def get_down(self, dim: int, a: float) -> torch.Tensor:
         """Get persistent down-Laplacian."""
         from petls_torch.core.laplacian import get_down
+
         return get_down(self.filtered_boundaries[dim], a, self.device)
 
     def _solve_eigs(self, L: torch.Tensor) -> torch.Tensor:
@@ -265,6 +269,7 @@ class Complex:
 
         algorithm = self._eigs_algorithm
         if algorithm == "sparse":
+
             def sparse_algorithm(matrix: torch.Tensor) -> np.ndarray:
                 return sparse_wrapper(
                     matrix.cpu().numpy(),
@@ -272,14 +277,13 @@ class Complex:
                     which_eigs=self._eigenvalue_order,
                 )
 
-            return torch.asarray(
-                sparse_algorithm(L), dtype=L.dtype, device=L.device
-            )
+            return torch.asarray(sparse_algorithm(L), dtype=L.dtype, device=L.device)
         return solve_eigenvalues(L, algorithm=algorithm)
 
     def _solve_eigenpairs(self, L: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Dispatch to eigenpair solver."""
         from petls_torch.core.eigenvalues import solve_eigenpairs
+
         return solve_eigenpairs(L, algorithm="eigh")
 
     def spectra(
@@ -381,7 +385,7 @@ class Complex:
                 if actual < expected:
                     eigs_list = [0.0] * (expected - actual) + sorted(eigs_list)
                 elif actual > expected:
-                    eigs_list = sorted(eigs_list)[actual - expected:]
+                    eigs_list = sorted(eigs_list)[actual - expected :]
 
             betti, lam = self.eigenvalues_summarize(eigs_list)
             self.profile.dims.append(d)
@@ -393,7 +397,11 @@ class Complex:
             if self.verbose:
                 self._logger.debug(
                     "dim=%s a=%s b=%s | size=%s | betti=%s",
-                    d, fa, fb, l_rows, betti,
+                    d,
+                    fa,
+                    fb,
+                    l_rows,
+                    betti,
                 )
 
             responses.append((d, fa, fb, eigs_list))
@@ -431,7 +439,13 @@ class Complex:
             If request_list or no args passed: [(dim, a, b, eigenvalues, eigenvectors), ...]
         """
         single_query = dim is not None and a is not None and b is not None
-        if not single_query and dim is not None and a is None and b is None and request_list is None:
+        if (
+            not single_query
+            and dim is not None
+            and a is None
+            and b is None
+            and request_list is None
+        ):
             request_list = dim
             dim = None
 

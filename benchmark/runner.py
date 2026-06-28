@@ -21,6 +21,7 @@ import numpy as np
 @dataclass
 class BenchmarkResult:
     """Single measurement for one (dataset, n_points, dim, a, b) trial."""
+
     package: str
     dataset: str
     n_points: int
@@ -30,9 +31,9 @@ class BenchmarkResult:
     filtration_a: float
     filtration_b: float
     matrix_rows: int
-    build_time_ms: float = 0.0          # time to build Laplacian matrix
-    eigs_time_ms: float = 0.0           # time for eigendecomposition
-    total_time_ms: float = 0.0          # build + eigs
+    build_time_ms: float = 0.0  # time to build Laplacian matrix
+    eigs_time_ms: float = 0.0  # time for eigendecomposition
+    total_time_ms: float = 0.0  # build + eigs
     eigenvalue_count: int = 0
     betti: int = 0
     least_nonzero: float = 0.0
@@ -44,6 +45,7 @@ class BenchmarkResult:
 @dataclass
 class BenchmarkSuiteResult:
     """Aggregated results for a full benchmark run."""
+
     suite_name: str
     results: List[BenchmarkResult] = field(default_factory=list)
     start_time: Optional[float] = None

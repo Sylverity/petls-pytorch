@@ -57,6 +57,7 @@ def torch_alpha_off():
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _extract_spectra(alpha_obj):
     """Run ``spectra()`` and return a dict keyed by (dim, a, b)."""
     result = {}
@@ -84,6 +85,7 @@ def _compare_spectra(ref_dict, test_dict):
 # Construction tests
 # ---------------------------------------------------------------------------
 
+
 class TestAlphaConstruction:
     def test_top_dim_matches_reference_points(self, ref_alpha_points, torch_alpha_points):
         assert torch_alpha_points.top_dim == ref_alpha_points.pl.top_dim
@@ -109,6 +111,7 @@ class TestAlphaConstruction:
 # ---------------------------------------------------------------------------
 # Spectra parity with reference
 # ---------------------------------------------------------------------------
+
 
 class TestAlphaSpectra:
     def test_spectra_points_vs_reference(self, ref_alpha_points, torch_alpha_points):
@@ -152,6 +155,7 @@ class TestAlphaSpectra:
 # Eigenpairs parity
 # ---------------------------------------------------------------------------
 
+
 class TestAlphaEigenpairs:
     def test_eigenpairs_values_match(self, ref_alpha_points, torch_alpha_points):
         ref_vals, ref_vecs = ref_alpha_points.eigenpairs(1, 0.25, 0.5)
@@ -173,14 +177,13 @@ class TestAlphaEigenpairs:
             v = vecs[:, i]
             lhs = L @ v
             rhs = lam * v
-            np.testing.assert_allclose(
-                lhs.cpu().numpy(), rhs.cpu().numpy(), atol=ATOL, rtol=RTOL
-            )
+            np.testing.assert_allclose(lhs.cpu().numpy(), rhs.cpu().numpy(), atol=ATOL, rtol=RTOL)
 
 
 # ---------------------------------------------------------------------------
 # max_dim parameter
 # ---------------------------------------------------------------------------
+
 
 class TestAlphaMaxDim:
     def test_max_dim_2(self):
@@ -205,6 +208,7 @@ class TestAlphaMaxDim:
 # because C++ and Python boundary extractions use different simplex orderings,
 # but eigenvalues / rank / L = up + down must match).
 # ---------------------------------------------------------------------------
+
 
 class TestAlphaLaplacian:
     def test_get_L_eigenvalues_match_reference(self, ref_alpha_points, torch_alpha_points):

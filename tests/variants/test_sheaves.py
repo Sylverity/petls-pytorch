@@ -38,9 +38,7 @@ def my_restriction(simplex, coface, sst):
 
 
 def get_sst(points, charges):
-    st = gudhi.RipsComplex(points=points, max_edge_length=6).create_simplex_tree(
-        max_dimension=3
-    )
+    st = gudhi.RipsComplex(points=points, max_edge_length=6).create_simplex_tree(max_dimension=3)
 
     extra_data = {
         tuple([0]): [*points[0], charges[0]],

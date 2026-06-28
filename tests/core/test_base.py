@@ -22,16 +22,10 @@ from tests.conftest import assert_tensors_close
 
 def get_small_complex():
     """Exact data from original test_base.py::get_pl()."""
-    d1 = np.array([[-1, 0, -1],
-                   [1, -1, 0],
-                   [0, 1, 1]], dtype=np.float32)
-    d2 = np.array([[1],
-                   [1],
-                   [-1]], dtype=np.float32)
+    d1 = np.array([[-1, 0, -1], [1, -1, 0], [0, 1, 1]], dtype=np.float32)
+    d2 = np.array([[1], [1], [-1]], dtype=np.float32)
     boundaries = [d1, d2]
-    filtrations = [[0.0, 1.0, 2.0],
-                   [3.0, 4.0, 5.0],
-                   [5.0]]
+    filtrations = [[0.0, 1.0, 2.0], [3.0, 4.0, 5.0], [5.0]]
     return Complex(boundaries=boundaries, filtrations=filtrations)
 
 
@@ -116,7 +110,7 @@ def test_spectra_specific(ref_small_complex):
     pl = get_small_complex()
     our = pl.spectra(0, 5.0, 6.0)
     ref = ref_small_complex.pl.spectra(0, 5.0, 6.0)
-    ref_list = ref.tolist() if hasattr(ref, 'tolist') else ref
+    ref_list = ref.tolist() if hasattr(ref, "tolist") else ref
     assert pytest.approx(our, abs=1e-4) == ref_list
 
 
@@ -125,7 +119,7 @@ def test_spectra_single_dim_0(ref_small_complex):
     pl = get_small_complex()
     our = pl.spectra(0, 1.2, 4.5)
     ref = ref_small_complex.pl.spectra(0, 1.2, 4.5)
-    ref_list = ref.tolist() if hasattr(ref, 'tolist') else ref
+    ref_list = ref.tolist() if hasattr(ref, "tolist") else ref
     assert pytest.approx(our, abs=1e-4) == ref_list
 
 
@@ -134,7 +128,7 @@ def test_spectra_single_dim_1(ref_small_complex):
     pl = get_small_complex()
     our = pl.spectra(1, 3.0, 4.0)
     ref = ref_small_complex.pl.spectra(1, 3.0, 4.0)
-    ref_list = ref.tolist() if hasattr(ref, 'tolist') else ref
+    ref_list = ref.tolist() if hasattr(ref, "tolist") else ref
     assert pytest.approx(our, abs=1e-4) == ref_list
 
 
@@ -149,7 +143,7 @@ def test_spectra_all(ref_small_complex):
         assert o[0] == r[0]  # dim
         assert abs(o[1] - r[1]) < 1e-6  # a
         assert abs(o[2] - r[2]) < 1e-6  # b
-        ref_eigs = r[3].tolist() if hasattr(r[3], 'tolist') else r[3]
+        ref_eigs = r[3].tolist() if hasattr(r[3], "tolist") else r[3]
         assert pytest.approx(o[3], abs=1e-4) == ref_eigs
 
 
@@ -164,7 +158,7 @@ def test_spectra_allpairs(ref_small_complex):
         assert o[0] == r[0]
         assert abs(o[1] - r[1]) < 1e-6
         assert abs(o[2] - r[2]) < 1e-6
-        ref_eigs = r[3].tolist() if hasattr(r[3], 'tolist') else r[3]
+        ref_eigs = r[3].tolist() if hasattr(r[3], "tolist") else r[3]
         assert pytest.approx(o[3], abs=1e-4) == ref_eigs
 
 
@@ -180,7 +174,7 @@ def test_spectra_request_list(ref_small_complex):
         assert o[0] == r[0]
         assert abs(o[1] - r[1]) < 1e-6
         assert abs(o[2] - r[2]) < 1e-6
-        ref_eigs = r[3].tolist() if hasattr(r[3], 'tolist') else r[3]
+        ref_eigs = r[3].tolist() if hasattr(r[3], "tolist") else r[3]
         assert pytest.approx(o[3], abs=1e-4) == ref_eigs
 
 
@@ -195,7 +189,7 @@ def test_eigenpairs_single(ref_small_complex):
     our_vals, our_vecs = pl.eigenpairs(0, 5.0, 6.0)
     ref_vals, ref_vecs = ref_small_complex.pl.eigenpairs(0, 5.0, 6.0)
 
-    ref_vals_list = ref_vals.tolist() if hasattr(ref_vals, 'tolist') else ref_vals
+    ref_vals_list = ref_vals.tolist() if hasattr(ref_vals, "tolist") else ref_vals
     assert pytest.approx(our_vals, abs=1e-4) == ref_vals_list
     assert our_vecs.shape == tuple(ref_vecs.shape)
 
@@ -221,7 +215,7 @@ def test_eigenpairs_request_list(ref_small_complex):
         assert o[0] == r[0]
         assert abs(o[1] - r[1]) < 1e-6
         assert abs(o[2] - r[2]) < 1e-6
-        ref_eigs = r[3].tolist() if hasattr(r[3], 'tolist') else r[3]
+        ref_eigs = r[3].tolist() if hasattr(r[3], "tolist") else r[3]
         assert pytest.approx(o[3], abs=1e-4) == ref_eigs
         assert o[4].shape == tuple(r[4].shape)
 

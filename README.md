@@ -27,7 +27,12 @@ dflag = petls_torch.dFlag("graph.flag", max_dim=3)
 # Sheaf Laplacian
 sst = petls_torch.sheaf_simplex_tree(st, extra_data, restriction)
 psl = petls_torch.PersistentSheafLaplacian(sst)
+filtrations = psl.get_all_filtrations()
+sheaf_eigs = psl.spectra(dim=0, a=filtrations[0], b=filtrations[-1])
 ```
+
+For `spectra(dim, a, b)`, choose `a` and `b` from the filtration values in
+`psl.get_all_filtrations()` with `a <= b`.
 
 ## Relationship to PETLS
 

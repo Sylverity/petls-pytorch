@@ -36,16 +36,12 @@ class TestdFlagConstruction:
     def test_filtration_count_matches_mwe(self):
         ref = petls.dFlag(MWE_PATH, 3)
         test = dFlag(MWE_PATH, 3)
-        assert test.get_all_filtrations() == pytest.approx(
-            ref.pl.get_all_filtrations(), abs=ATOL
-        )
+        assert test.get_all_filtrations() == pytest.approx(ref.pl.get_all_filtrations(), abs=ATOL)
 
     def test_filtration_count_matches_cycle(self):
         ref = petls.dFlag(CYCLE_PATH, 3)
         test = dFlag(CYCLE_PATH, 3)
-        assert test.get_all_filtrations() == pytest.approx(
-            ref.pl.get_all_filtrations(), abs=ATOL
-        )
+        assert test.get_all_filtrations() == pytest.approx(ref.pl.get_all_filtrations(), abs=ATOL)
 
 
 class TestdFlagLaplacian:
@@ -103,9 +99,7 @@ class TestdFlagLaplacian:
                     continue
                 ref_eigs = np.linalg.eigvalsh(ref_down)
                 test_eigs = np.linalg.eigvalsh(test_down.cpu().numpy())
-                np.testing.assert_allclose(
-                    ref_eigs, test_eigs, atol=ATOL, rtol=RTOL
-                )
+                np.testing.assert_allclose(ref_eigs, test_eigs, atol=ATOL, rtol=RTOL)
 
     def test_L_equals_up_plus_down_mwe(self):
         test = dFlag(MWE_PATH, 3)
@@ -149,6 +143,4 @@ class TestdFlagSpectra:
                     continue
                 ref_eigs = np.linalg.eigvalsh(ref_L)
                 test_eigs = test.spectra(dim, a, b)
-                np.testing.assert_allclose(
-                    ref_eigs, np.array(test_eigs), atol=ATOL, rtol=RTOL
-                )
+                np.testing.assert_allclose(ref_eigs, np.array(test_eigs), atol=ATOL, rtol=RTOL)

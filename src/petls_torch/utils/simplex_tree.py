@@ -58,9 +58,7 @@ def simplex_tree_boundaries_filtrations(
             sign = 1
 
         for face, _ in simplex_tree.get_boundaries(simplex):
-            boundaries_triples[dim].append(
-                [indices[tuple(face)], indices[tuple(simplex)], sign]
-            )
+            boundaries_triples[dim].append([indices[tuple(face)], indices[tuple(simplex)], sign])
             sign = -sign
 
     index_mappings = [{} for _ in range(max_dim + 1)]

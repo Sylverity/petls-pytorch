@@ -59,7 +59,8 @@ def get_down(
         # Empty or degenerate boundary → zero Laplacian
         target_device = device if device is not None else B.device
         return torch.zeros(
-            B.shape[1], B.shape[1],
+            B.shape[1],
+            B.shape[1],
             dtype=get_dtype(),
             device=target_device,
         )

@@ -31,9 +31,7 @@ def summaries(
     indexed_filtrations = {a: i for i, a in enumerate(all_filtrations)}
     indexed_dims = {dim: i for i, dim in enumerate(sorted(list(dims)))}
     num_filtrations = len(all_filtrations)
-    summaries_list = [
-        np.zeros((num_filtrations, num_filtrations)) for _ in range(len(dims))
-    ]
+    summaries_list = [np.zeros((num_filtrations, num_filtrations)) for _ in range(len(dims))]
 
     for dim in range(len(indexed_dims)):
         for i in range(num_filtrations):
@@ -41,7 +39,9 @@ def summaries(
                 summaries_list[dim][i, j] = lower_triangle
 
     for dim, a, b, eigs in spectra:
-        summaries_list[indexed_dims[dim]][indexed_filtrations[b], indexed_filtrations[a]] += func(eigs)
+        summaries_list[indexed_dims[dim]][indexed_filtrations[b], indexed_filtrations[a]] += func(
+            eigs
+        )
 
     return summaries_list, all_filtrations, sorted(dims)
 

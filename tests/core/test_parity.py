@@ -48,9 +48,7 @@ def test_eigenpairs_single_positional_request_list(small_complex):
 
 def test_set_eigs_algorithm_kwargs(small_complex):
     """set_eigs_algorithm accepts num_eigenvalues and eigenvalue_order."""
-    small_complex.set_eigs_algorithm(
-        "sparse", num_eigenvalues=2, eigenvalue_order="LM"
-    )
+    small_complex.set_eigs_algorithm("sparse", num_eigenvalues=2, eigenvalue_order="LM")
     assert small_complex._num_eigenvalues == 2
     assert small_complex._eigenvalue_order == "LM"
 

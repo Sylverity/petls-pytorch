@@ -83,8 +83,7 @@ def solve_eigenvalues(
 
     if algorithm not in SOLVERS:
         raise ValueError(
-            f"Unknown eigenvalue algorithm '{algorithm}'. "
-            f"Available: {list(SOLVERS.keys())}"
+            f"Unknown eigenvalue algorithm '{algorithm}'. Available: {list(SOLVERS.keys())}"
         )
 
     return SOLVERS[algorithm](L)
@@ -113,8 +112,7 @@ def solve_eigenpairs(
 
     if algorithm not in SOLVERS:
         raise ValueError(
-            f"Unknown eigenpair algorithm '{algorithm}'. "
-            f"Available: {list(SOLVERS.keys())}"
+            f"Unknown eigenpair algorithm '{algorithm}'. Available: {list(SOLVERS.keys())}"
         )
 
     solver = SOLVERS[algorithm]

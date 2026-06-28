@@ -23,6 +23,7 @@ RTOL = 1e-3
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _extract_spectra(alpha_obj):
     """Run ``spectra()`` and return a dict keyed by (dim, a, b)."""
     result = {}
@@ -50,19 +51,24 @@ def _compare_spectra(ref_dict, test_dict):
 # Fixtures
 # ---------------------------------------------------------------------------
 
-POINTS_RECT = np.array([
-    [0, 0],
-    [0, 3],
-    [4, 0],
-    [4, 3],
-])
+POINTS_RECT = np.array(
+    [
+        [0, 0],
+        [0, 3],
+        [4, 0],
+        [4, 3],
+    ]
+)
 
-DISTANCES_RECT = np.array([
-    [0, 0, 0, 0],
-    [3, 0, 0, 0],
-    [4, 5, 0, 0],
-    [5, 4, 3, 0],
-], dtype=np.float64)
+DISTANCES_RECT = np.array(
+    [
+        [0, 0, 0, 0],
+        [3, 0, 0, 0],
+        [4, 5, 0, 0],
+        [5, 4, 3, 0],
+    ],
+    dtype=np.float64,
+)
 
 FILE_PATH = "tests/variants/data/rips/rect.lower_distance_matrix"
 
@@ -95,6 +101,7 @@ def _ref_rips_file(threshold=None):
 # Construction tests
 # ---------------------------------------------------------------------------
 
+
 class TestRipsConstruction:
     def test_top_dim_matches_reference_points(self):
         ref = _ref_rips_points()
@@ -119,6 +126,7 @@ class TestRipsConstruction:
 # ---------------------------------------------------------------------------
 # Spectra parity with reference (no threshold)
 # ---------------------------------------------------------------------------
+
 
 class TestRipsSpectraNoThreshold:
     def test_points_vs_reference(self):
@@ -148,6 +156,7 @@ class TestRipsSpectraNoThreshold:
 # Spectra parity with reference (with threshold=4.5)
 # ---------------------------------------------------------------------------
 
+
 class TestRipsSpectraThreshold:
     def test_points_vs_reference(self):
         ref = _ref_rips_points(threshold=4.5)
@@ -175,6 +184,7 @@ class TestRipsSpectraThreshold:
 # ---------------------------------------------------------------------------
 # Laplacian matrix properties
 # ---------------------------------------------------------------------------
+
 
 class TestRipsLaplacian:
     def test_get_L_eigenvalues_match_reference(self):
