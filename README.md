@@ -165,6 +165,8 @@ pip install petls-pytorch
 
 Requires CPython 3.10, 3.11, 3.12, 3.13, or 3.14.
 
+Release notes are tracked in [CHANGELOG.md](CHANGELOG.md).
+
 Dependencies:
 
 - `torch`

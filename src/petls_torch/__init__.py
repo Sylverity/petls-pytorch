@@ -22,7 +22,7 @@ from petls_torch.variants.sheaf import sheaf_simplex_tree, PersistentSheafLaplac
 from petls_torch.utils.plotting import summaries, plot_summary
 from petls_torch.utils.simplex_tree import simplex_tree_boundaries_filtrations
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 
 class UpAlgorithms(enum.Enum):
