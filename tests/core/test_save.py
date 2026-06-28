@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 
 import numpy as np
-import pytest
 
 from petls_torch.core.complex import Complex
 
@@ -88,3 +87,17 @@ def test_time_to_csv():
     finally:
         if os.path.exists(filename):
             os.remove(filename)
+
+
+def test_time_to_csv_vertex_only_complex(tmp_path):
+    pl = Complex(boundaries=[], filtrations=[[0.0, 1.0, 2.0]])
+    eigs = pl.spectra(0, 2.0, 2.0)
+
+    assert eigs == [0.0, 0.0, 0.0]
+    assert len(pl.profile.durations_all) == 1
+    assert len(pl.profile.durations_L) == 1
+    assert len(pl.profile.durations_eigs) == 1
+
+    filename = tmp_path / "vertex_only_profile.csv"
+    pl.time_to_csv(str(filename))
+    assert filename.exists()

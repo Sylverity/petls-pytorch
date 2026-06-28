@@ -13,7 +13,7 @@ import time
 import json
 import csv
 from dataclasses import dataclass, field, asdict
-from typing import List, Dict, Optional, Callable
+from typing import List, Dict, Optional
 from pathlib import Path
 import numpy as np
 
@@ -21,6 +21,7 @@ import numpy as np
 @dataclass
 class BenchmarkResult:
     """Single measurement for one (dataset, n_points, dim, a, b) trial."""
+    package: str
     dataset: str
     n_points: int
     complex_type: str
@@ -101,12 +102,14 @@ class BenchmarkRunner:
         output_dir: str = "./benchmark_results",
         algorithm: str = "eigvalsh",
         device: str = "cpu",
+        package: str = "petls_torch",
         verbose: bool = True,
     ):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.algorithm = algorithm
         self.device = device
+        self.package = package.lower()
         self.verbose = verbose
 
     def run_trial(
@@ -120,6 +123,7 @@ class BenchmarkRunner:
         seed: int = 42,
         dims: Optional[List[int]] = None,
         filtration_pairs: Optional[List[tuple]] = None,
+        package: Optional[str] = None,
     ) -> List[BenchmarkResult]:
         """
         Run a single benchmark trial for one dataset at one scale.
@@ -151,8 +155,13 @@ class BenchmarkRunner:
         """
         from .datasets import generate_dataset
 
+        package = (self.package if package is None else package).lower()
+
         if self.verbose:
-            print(f"\n[Benchmark] {dataset_name} | n={n_points} | {complex_type} | max_dim={max_dim}")
+            print(
+                f"\n[Benchmark] {dataset_name} | n={n_points} | {complex_type} | "
+                f"max_dim={max_dim} | package={package}"
+            )
             print("-" * 60)
 
         # Build dataset & complex
@@ -165,6 +174,8 @@ class BenchmarkRunner:
             num_filtrations=num_filtrations,
             filtration_mode=filtration_mode,
             seed=seed,
+            package=package,
+            device=self.device if package == "petls_torch" else None,
         )
         t_build_complex = (time.perf_counter() - t0) * 1000
         if self.verbose:
@@ -223,6 +234,7 @@ class BenchmarkRunner:
             betti, lam = complex_obj.eigenvalues_summarize(eigs)
 
             result = BenchmarkResult(
+                package=package,
                 dataset=dataset_name,
                 n_points=n_points,
                 complex_type=complex_type,
@@ -294,13 +306,20 @@ def run_single_benchmark(
     max_dim: int = 3,
     num_filtrations: int = 20,
     algorithm: str = "eigvalsh",
+    package: str = "petls_torch",
+    device: str = "cpu",
     output_dir: str = "./benchmark_results",
     seed: int = 42,
 ) -> BenchmarkSuiteResult:
     """Convenience function for a single benchmark run."""
-    runner = BenchmarkRunner(output_dir=output_dir, algorithm=algorithm)
+    runner = BenchmarkRunner(
+        output_dir=output_dir,
+        algorithm=algorithm,
+        package=package,
+        device=device,
+    )
     return runner.run_suite(
-        name=f"{dataset}_{n_points}_{complex_type}",
+        name=f"{package}_{dataset}_{n_points}_{complex_type}",
         configs=[
             {
                 "dataset_name": dataset,

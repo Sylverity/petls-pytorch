@@ -12,7 +12,7 @@ Each dataset produces point clouds that are fed into Alpha or Rips complexes.
 
 import numpy as np
 import tadasets
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Optional
 import json
 from pathlib import Path
 
@@ -131,6 +131,8 @@ def generate_dataset(
     filtration_mode: str = "quantile",
     seed: int = 42,
     cache_dir: Optional[str] = None,
+    package: str = "petls_torch",
+    device: Optional[str] = None,
 ) -> dict:
     """
     Generate a complete benchmark dataset: point cloud -> complex -> sampled filtrations.
@@ -138,22 +140,37 @@ def generate_dataset(
     Returns a dict with:
         points          : np.ndarray, shape (n_points, 3)
         complex_type    : 'alpha' or 'rips'
+        package         : 'petls' or 'petls_torch'
         max_dim         : int
         filtrations     : List[float] (sampled subset)
         all_filtrations : List[float] (full set)
         metadata        : dict
     """
-    import petls
+    package = package.lower()
+    if package == "petls":
+        import petls
+
+        Alpha = petls.Alpha
+        Rips = petls.Rips
+    elif package == "petls_torch":
+        import petls_torch
+
+        if device is not None:
+            petls_torch.set_device(device)
+        Alpha = petls_torch.Alpha
+        Rips = petls_torch.Rips
+    else:
+        raise ValueError(f"package must be 'petls' or 'petls_torch', got {package}")
 
     points = generate_point_cloud(name, n_points, seed=seed)
 
     if complex_type.lower() == "alpha":
-        complex_obj = petls.Alpha(points=points.tolist(), max_dim=max_dim)
+        complex_obj = Alpha(points=points.tolist(), max_dim=max_dim)
     elif complex_type.lower() == "rips":
         # For Rips we need a threshold; set it to cover the diameter
         from scipy.spatial.distance import pdist
         diam = pdist(points).max() * 1.1
-        complex_obj = petls.Rips(points=points.tolist(), max_dim=max_dim, threshold=float(diam))
+        complex_obj = Rips(points=points.tolist(), max_dim=max_dim, threshold=float(diam))
     else:
         raise ValueError(f"complex_type must be 'alpha' or 'rips', got {complex_type}")
 
@@ -182,6 +199,7 @@ def generate_dataset(
         "name": name,
         "n_points": n_points,
         "complex_type": complex_type,
+        "package": package,
         "max_dim": max_dim,
         "points": points,
         "complex": complex_obj,
@@ -192,6 +210,8 @@ def generate_dataset(
         "metadata": {
             "seed": seed,
             "filtration_mode": filtration_mode,
+            "package": package,
+            "device": device,
             **DATASET_REGISTRY[name]["params"],
         },
     }

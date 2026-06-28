@@ -65,9 +65,9 @@ The benchmark results below are included to give a sense of current runtime
 behavior on one local machine. They should be read as preliminary measurements,
 not as a comprehensive performance study.
 
-The benchmark suite uses the same synthetic datasets, filtrations, and matrix
-sizes for both packages. The shared benchmark runner is parameterized with
-`--package petls` or `--package petls_torch`.
+The benchmark suite is a performance comparison against the reference PETLS
+implementation on identical synthetic inputs. The shared runner is
+parameterized with `--package petls` or `--package petls_torch`.
 
 ### Hardware
 
@@ -123,16 +123,16 @@ from CUDA support on larger matrix workloads.
 ```bash
 # Original PETLS
 cd /path/to/workspace
-python -m benchmark_shared --preset quick --package petls --algorithm eigvalsh
+python -m benchmark --preset quick --package petls --algorithm eigvalsh
 
 # PETLS-PyTorch on CUDA
-python -m benchmark_shared --preset quick --package petls_torch --algorithm eigvalsh --device cuda
+python -m benchmark --preset quick --package petls_torch --algorithm eigvalsh --device cuda
 
 # PETLS-PyTorch on CPU
-python -m benchmark_shared --preset quick --package petls_torch --algorithm eigvalsh --device cpu
+python -m benchmark --preset quick --package petls_torch --algorithm eigvalsh --device cpu
 
 # Custom single run
-python -m benchmark_shared \
+python -m benchmark \
     --dataset torus --n_points 2000 --complex alpha --max_dim 3 \
     --package petls_torch --algorithm eigvalsh
 ```

@@ -140,7 +140,7 @@ def analyze_file(path: str, plot_dir: Optional[str] = None) -> Dict:
     p_eigs = float(np.polyfit(log_n, log_eigs, 1)[0]) if len(log_n) > 2 else 0.0
     p_total = float(np.polyfit(log_n, log_total, 1)[0]) if len(log_n) > 2 else 0.0
 
-    print(f"  Scaling exponents (time ~ n^p):")
+    print("  Scaling exponents (time ~ n^p):")
     print(f"    Build: {p_build:.2f}")
     print(f"    Eigs:  {p_eigs:.2f}")
     print(f"    Total: {p_total:.2f}")

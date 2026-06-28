@@ -2,9 +2,9 @@
 PETLS Benchmark CLI
 
 Usage:
-    python -m benchmark --preset standard
+    python -m benchmark --preset standard --package petls_torch
     python -m benchmark --dataset torus --n_points 5000 --complex alpha --max_dim 3
-    python -m benchmark --preset quick --algorithm selfadjoint
+    python -m benchmark --preset quick --package petls --algorithm selfadjoint
 
 Presets:
     quick      : Small datasets for CI/smoke testing (< 1 min)
@@ -60,7 +60,7 @@ PRESETS = {
 
 def main():
     parser = argparse.ArgumentParser(
-        description="PETLS Benchmark Suite",
+        description="Performance comparison against the reference PETLS implementation",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"""
 Available datasets: {', '.join(list_datasets())}
@@ -68,16 +68,16 @@ Available presets:  {', '.join(PRESETS.keys())}
 
 Examples:
   # Quick smoke test
-  python -m benchmark --preset quick
+  python -m benchmark --preset quick --package petls_torch
 
-  # Standard representative run
-  python -m benchmark --preset standard --algorithm selfadjoint
+  # Reference PETLS run
+  python -m benchmark --preset standard --package petls --algorithm selfadjoint
 
   # Intensive GPU stress test
-  python -m benchmark --preset intensive --algorithm eigvalsh
+  python -m benchmark --preset intensive --package petls_torch --algorithm eigvalsh --device cuda
 
   # Single custom run
-  python -m benchmark --dataset torus --n_points 5000 --complex alpha --max_dim 3
+  python -m benchmark --dataset torus --n_points 5000 --complex alpha --max_dim 3 --package petls_torch
 """,
     )
     parser.add_argument("--preset", type=str, choices=list(PRESETS.keys()),
@@ -96,6 +96,9 @@ Examples:
                         default="quantile", help="Filtration sampling strategy")
     parser.add_argument("--algorithm", type=str, default="eigvalsh",
                         help="Eigenvalue algorithm (eigvalsh, selfadjoint, spectra, etc.)")
+    parser.add_argument("--package", type=str, choices=["petls", "petls_torch"],
+                        default="petls_torch",
+                        help="Backend package to benchmark (default: petls_torch)")
     parser.add_argument("--output_dir", type=str, default="./benchmark_results",
                         help="Directory to write results")
     parser.add_argument("--device", type=str, default="cpu",
@@ -120,6 +123,7 @@ Examples:
         output_dir=args.output_dir,
         algorithm=args.algorithm,
         device=args.device,
+        package=args.package,
         verbose=True,
     )
 
@@ -127,10 +131,12 @@ Examples:
         preset = PRESETS[args.preset]
         print(f"\n{'#'*60}")
         print(f"# Running preset: {args.preset}")
+        print(f"# Package:        {args.package}")
         print(f"# Algorithm:      {args.algorithm}")
+        print(f"# Device:         {args.device if args.package == 'petls_torch' else 'cpu'}")
         print(f"# Output:         {args.output_dir}")
         print(f"{'#'*60}\n")
-        suite = runner.run_suite(name=preset["name"], configs=preset["configs"])
+        runner.run_suite(name=f"{args.package}_{preset['name']}", configs=preset["configs"])
         print(f"\nResults written to: {Path(args.output_dir).resolve()}")
         return 0
 
@@ -140,8 +146,8 @@ Examples:
         parser.print_help()
         return 1
 
-    suite = runner.run_suite(
-        name=f"{args.dataset}_{args.n_points}_{args.complex}",
+    runner.run_suite(
+        name=f"{args.package}_{args.dataset}_{args.n_points}_{args.complex}",
         configs=[
             {
                 "dataset_name": args.dataset,

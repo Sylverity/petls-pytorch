@@ -14,7 +14,7 @@ from typing import Callable, List, Optional, Tuple
 import numpy as np
 import torch
 
-from petls_torch._config import get_device, get_dtype, get_tol
+from petls_torch._config import get_device, get_dtype
 from petls_torch.core.filtered_boundary import FilteredBoundaryMatrix
 from petls_torch.core.profile import Profile
 
@@ -112,16 +112,27 @@ class Complex:
         self.top_dim = len(boundaries)
 
         # d_0 placeholder to align indexing with the original PETLS Complex.
+        # For vertex-only complexes, keep the real 0-simplex filtrations so
+        # spectra() can report the correct Betti-0 multiplicity.
+        if boundaries:
+            vertex_filtrations = torch.tensor(
+                [0.0], device=self.device, dtype=torch.float64
+            )
+        else:
+            vertex_filtrations = torch.tensor(
+                filtrations[0], device=self.device, dtype=torch.float64
+            )
+        n_vertices = len(vertex_filtrations)
         with torch.sparse.check_sparse_tensor_invariants():
             dummy_mat = torch.sparse_coo_tensor(
                 indices=torch.empty((2, 0), dtype=torch.long, device=self.device),
                 values=torch.empty(0, dtype=self.dtype, device=self.device),
-                size=(1, 1),
+                size=(n_vertices, n_vertices),
             ).coalesce()
         dummy = FilteredBoundaryMatrix(
             matrix=dummy_mat,
-            domain_filtrations=torch.tensor([0.0], device=self.device, dtype=torch.float64),
-            range_filtrations=torch.tensor([0.0], device=self.device, dtype=torch.float64),
+            domain_filtrations=vertex_filtrations,
+            range_filtrations=vertex_filtrations,
         )
         self.filtered_boundaries.append(dummy)
 
@@ -254,13 +265,15 @@ class Complex:
 
         algorithm = self._eigs_algorithm
         if algorithm == "sparse":
-            algorithm = lambda L: sparse_wrapper(
-                L.cpu().numpy(),
-                num_eigs=self._num_eigenvalues,
-                which_eigs=self._eigenvalue_order,
-            )
+            def sparse_algorithm(matrix: torch.Tensor) -> np.ndarray:
+                return sparse_wrapper(
+                    matrix.cpu().numpy(),
+                    num_eigs=self._num_eigenvalues,
+                    which_eigs=self._eigenvalue_order,
+                )
+
             return torch.asarray(
-                algorithm(L), dtype=L.dtype, device=L.device
+                sparse_algorithm(L), dtype=L.dtype, device=L.device
             )
         return solve_eigenvalues(L, algorithm=algorithm)
 
@@ -318,6 +331,8 @@ class Complex:
             if d == 0 and len(self.filtered_boundaries) == 1:
                 betti0 = self.filtered_boundaries[0].index_of_filtration(True, fa) + 1
                 eigs_list = [0.0] * betti0
+                self.profile.durations_L.append(0.0)
+                self.profile.durations_eigs.append(0.0)
                 self.profile.stop_all()
                 self.profile.dims.append(d)
                 self.profile.filtration_a.append(fa)
