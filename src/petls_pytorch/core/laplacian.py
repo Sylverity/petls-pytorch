@@ -21,6 +21,8 @@ from petls_pytorch._config import get_device, get_dtype
 if TYPE_CHECKING:
     from petls_pytorch.core.filtered_boundary import FilteredBoundaryMatrix
 
+_CUDA_CPU_BUILD_FALLBACK_ROWS = 256
+
 
 def _symmetrize_lower(L: torch.Tensor) -> torch.Tensor:
     """
@@ -214,6 +216,26 @@ def get_L(
     """
     target_device = device if device is not None else get_device()
     dtype = get_dtype()
+
+    if target_device.type == "cuda":
+        if dim == 0:
+            l_rows = filtered_boundaries[1].index_of_filtration(False, a) + 1
+        elif dim > top_dim:
+            l_rows = 0
+        else:
+            l_rows = filtered_boundaries[dim].index_of_filtration(True, a) + 1
+        if 0 <= l_rows <= _CUDA_CPU_BUILD_FALLBACK_ROWS:
+            cpu_boundaries = [fbm.cpu_mirror for fbm in filtered_boundaries]
+            if all(fbm is not None for fbm in cpu_boundaries):
+                L_cpu = get_L(
+                    dim,
+                    a,
+                    b,
+                    cpu_boundaries,  # type: ignore[arg-type]
+                    top_dim,
+                    torch.device("cpu"),
+                )
+                return L_cpu.to(device=target_device, dtype=dtype)
 
     if dim == 0:
         return get_up(filtered_boundaries[1], a, b, target_device)

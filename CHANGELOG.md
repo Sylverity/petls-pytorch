@@ -36,19 +36,26 @@
 - Assemble CPU two-entry incidence Laplacians through NumPy for small graph
   boundary matrices, reducing PyTorch scatter overhead on Rips dimension-0
   rows.
+- Keep CPU mirrors for CUDA boundary matrices and build Laplacians with at most
+  `256` rows on CPU before transferring the dense result back to CUDA, reducing
+  launch overhead on the smallest CUDA Rips rows while preserving CUDA return
+  tensors.
 - Checkpoint CPU standard preset on Windows:
   - PETLS direct-eigensolve baseline: `9.65 s` trial time, `0.61 s` complex
     builds.
-  - PETLS-PyTorch: `1.51 s` trial time, `0.58 s` complex builds.
+  - PETLS-PyTorch: `1.46 s` trial time, `0.61 s` complex builds.
 - Checkpoint CUDA standard preset on Windows:
-  - PETLS-PyTorch CUDA: `0.71 s` trial time, `0.64 s` complex builds.
-  - This iteration's CPU-only incidence path did not improve CUDA; reruns were
-    noisy at `0.74-0.77 s` trial time.
+  - PETLS-PyTorch CUDA: `0.72-0.75 s` trial time, `0.63 s` complex builds
+    across two fallback reruns.
   - Remaining row-wise misses against PETLS baseline:
-    - CPU: `10` total-time misses, `3` non-empty total-time misses, and no
+    - CPU: `13` total-time misses, `4` non-empty total-time misses, and no
       non-empty eigensolve-time misses out of `75` completed rows.
-    - CUDA: `21` total-time misses and `3` non-empty eigensolve-time misses out
+    - CUDA: best fallback rerun reduced total-time misses to `19`, with `9`
+      non-empty total-time misses and `4` non-empty eigensolve-time misses out
       of `75` completed rows.
+    - CUDA total-time overage dropped from `27.64 ms` before this checkpoint to
+      `17.50 ms` in the best-count rerun and `11.70 ms` in the lowest-overage
+      rerun.
     - The aggregate trial time target is met, but the all-rows stopping
       condition is still open.
 

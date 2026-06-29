@@ -43,6 +43,13 @@ class FilteredBoundaryMatrix:
             raise ValueError("matrix must be a sparse tensor (COO or CSR)")
 
         target_device = torch.device(device) if device is not None else get_device()
+        cpu_mirror_source = None
+        if target_device.type == "cuda":
+            cpu_mirror_source = (
+                matrix.cpu(),
+                domain_filtrations.cpu(),
+                range_filtrations.cpu(),
+            )
         self.matrix = matrix.to(device=target_device)
         self.domain_filtrations = domain_filtrations.to(device=target_device, dtype=torch.float64)
         self.range_filtrations = range_filtrations.to(device=target_device, dtype=torch.float64)
@@ -54,6 +61,7 @@ class FilteredBoundaryMatrix:
         )
         self._submatrix_cache: dict[tuple[float, bool], torch.Tensor] = {}
         self._incidence_data: tuple[torch.Tensor, torch.Tensor] | bool | None = None
+        self._cpu_mirror: FilteredBoundaryMatrix | None = None
 
         # Ensure sorted filtrations (required for index_of_filtration correctness)
         if not torch.all(self.domain_filtrations[:-1] <= self.domain_filtrations[1:]):
@@ -67,6 +75,19 @@ class FilteredBoundaryMatrix:
             and self._coalesced_matrix._nnz() == 2 * self.num_cols
         ):
             self._get_incidence_data()
+
+        if cpu_mirror_source is not None:
+            cpu_matrix, cpu_domain_filtrations, cpu_range_filtrations = cpu_mirror_source
+            self._cpu_mirror = FilteredBoundaryMatrix(
+                cpu_matrix,
+                cpu_domain_filtrations,
+                cpu_range_filtrations,
+                device=torch.device("cpu"),
+            )
+
+    @property
+    def cpu_mirror(self) -> FilteredBoundaryMatrix | None:
+        return self._cpu_mirror
 
     @property
     def shape(self) -> tuple[int, int]:
