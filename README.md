@@ -125,81 +125,64 @@ the maximum edge weight in each simplex.
 
 ## Benchmark Notes
 
-The benchmark results below are included to give a sense of current runtime
-behavior in one local WSL2 environment. They should be read as preliminary
-measurements, not as a comprehensive performance study.
+The benchmark runner compares `petls-pytorch` and the original PETLS package on
+identical synthetic inputs. It streams progress for every trial and writes all
+CSV, JSON, and plot outputs under `benchmark-results/` by default.
 
-The benchmark suite is a performance comparison against the reference PETLS
-implementation on identical synthetic inputs. The shared runner is
-parameterized with `--package petls` or `--package petls-pytorch`.
+The `standard` preset is the main comparison workload. It exercises Alpha
+complexes on torus, sphere, swiss roll, and Klein bottle point clouds, plus a
+bounded Rips-complex case. It samples dimensions 0, 1, and 2 and caps dense
+matrix eigensolves at 1800 rows.
 
-### Hardware
+Final benchmark on our Windows 11 Pro machine:
 
-- CPU: Intel i7-13700K as reported by WSL2
-- GPU: NVIDIA RTX 4070 Ti 12GB
-- PyTorch 2.12.1+cu130 with CUDA available
+- CPU: Intel Core i7-13700K, 16 cores / 24 logical processors
+- GPU: NVIDIA GeForce RTX 4070 Ti, 12GB
+- PyTorch: `2.10.0+cu130`
+- Original PETLS: `petls==1.0.1`, native Windows C++ build
 
-### Quick Preset
+| Package | Device | Completed | Skipped | Trial Time | Mean Trial | Mean Eigs | Complex Builds | Max Completed Matrix |
+|---------|--------|----------:|--------:|-----------:|-----------:|----------:|---------------:|---------------------:|
+| `petls` | CPU | 75 | 3 | 3.69 s | 47.3 ms | 41.9 ms | 1.25 s | 1649 x 1649 |
+| `petls-pytorch` | CPU | 75 | 3 | 2.57 s | 33.0 ms | 24.1 ms | 3.14 s | 1649 x 1649 |
+| `petls-pytorch` | CUDA | 75 | 3 | 1.39 s | 17.8 ms | 11.0 ms | 3.01 s | 1649 x 1649 |
 
-Configuration: torus `n=500` plus sphere `n=300`, `max_dim=2`, 8 filtrations
-per dataset.
-
-| Package | Device | Total Time | Mean Trial | Mean Build | Mean Eigs |
-|---------|--------|-----------:|-----------:|-----------:|----------:|
-| `petls` | CPU | 442.88 s | 9226.6 ms | 25.0 ms | 9201.7 ms |
-| `petls-pytorch` | CPU | 419.67 s | 8743.0 ms | 284.3 ms | 8458.8 ms |
-| `petls-pytorch` | CUDA | 2.77 s | 57.8 ms | 9.5 ms | 48.3 ms |
-
-On this machine, the CPU runs are similar on this workload. The CUDA run is much
-faster because the dense eigendecompositions dominate the total runtime.
-
-### Medium Workload
-
-Configuration: torus `n=500`, `max_dim=3`, 16 filtrations.
-
-| Package | Device | Total Time | Mean Trial | Max Matrix | Status |
-|---------|--------|-----------:|-----------:|-----------:|--------|
-| `petls` | CPU | > 300 s | unavailable | unavailable | Reached benchmark timeout |
-| `petls-pytorch` | CPU | > 300 s | unavailable | unavailable | Reached benchmark timeout |
-| `petls-pytorch` | CUDA | 4.91 s | 76.7 ms | 5990 x 5990 | Completed |
-
-For this larger dense-eigendecomposition workload, the CUDA path completed
-within the benchmark timeout. Both CPU runs reached the configured 300-second
-timeout in this WSL2 test configuration.
-
-### Operation Breakdown
-
-Quick preset timings:
-
-```text
-petls (CPU)          : build=25.0 ms   eigs=9201.7 ms
-petls-pytorch (CPU)  : build=284.3 ms  eigs=8458.8 ms
-petls-pytorch (CUDA) : build=9.5 ms    eigs=48.3 ms
-```
-
-In these measurements, most time is spent in eigendecomposition. The PyTorch
-implementation benefits from PyTorch's dense linear algebra backends on CPU and
-from CUDA support on larger matrix workloads.
+On this workload, `petls-pytorch` CPU is `1.43x` faster by trial time and
+`1.74x` faster on eigensolves than native PETLS. On the RTX 4070 Ti,
+`petls-pytorch` CUDA is `2.66x` faster by trial time and `3.82x` faster on
+eigensolves.
 
 ## Running Benchmarks
 
 From a source checkout, run the benchmark module with `uv`. Add `--with petls`
-when benchmarking against the original PETLS package:
+when benchmarking against the original PETLS package.
 
 ```bash
-# Original PETLS
-uv run --with petls python -m benchmark --preset quick --package petls --algorithm eigvalsh
+# Representative CPU/GPU comparison
+uv run python -m benchmark --preset standard --package petls-pytorch --algorithm eigvalsh --device cpu
+uv run python -m benchmark --preset standard --package petls-pytorch --algorithm eigvalsh --device cuda
 
-# petls-pytorch on CUDA
-uv run python -m benchmark --preset quick --package petls-pytorch --algorithm eigvalsh --device cuda
+# Reference PETLS, if installed for your platform
+uv run --with petls python -m benchmark --preset standard --package petls --algorithm selfadjoint
 
-# petls-pytorch on CPU
-uv run python -m benchmark --preset quick --package petls-pytorch --algorithm eigvalsh --device cpu
+# Larger GPU stress run
+uv run python -m benchmark --preset stress --package petls-pytorch --algorithm eigvalsh --device cuda
 
 # Custom single run
 uv run python -m benchmark \
     --dataset torus --n_points 2000 --complex alpha --max_dim 3 \
-    --package petls-pytorch --algorithm eigvalsh
+    --package petls-pytorch --algorithm eigvalsh --device cuda \
+    --max_matrix_rows 12000
+```
+
+By default, benchmark files are written under `benchmark-results/results`. Use
+`--output_dir benchmark-results/<run-name>` to keep named runs together.
+
+Verify CUDA before benchmarking:
+
+```bash
+nvidia-smi
+python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)"
 ```
 
 If you are not using `uv`, install from the source checkout first:
@@ -207,7 +190,7 @@ If you are not using `uv`, install from the source checkout first:
 ```bash
 python -m pip install -e .
 python -m pip install petls  # only needed for --package petls
-python -m benchmark --preset quick --package petls --algorithm eigvalsh
+python -m benchmark --preset standard --package petls-pytorch --algorithm eigvalsh --device cpu
 ```
 
 ## Installation

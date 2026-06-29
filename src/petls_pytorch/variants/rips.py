@@ -159,7 +159,11 @@ class Rips(Complex):
                 max_edge_length=max_edge_length,
             )
 
-        simplex_tree = rips.create_simplex_tree(max_dimension=max_dim)
+        # PETLS interprets max_dim as the largest Laplacian dimension to
+        # query. Computing L_dim needs boundary d_{dim+1}, so build one
+        # simplex dimension higher when it exists.
+        build_dim = max_dim + 1
+        simplex_tree = rips.create_simplex_tree(max_dimension=build_dim)
 
         boundaries, filtrations = simplex_tree_boundaries_filtrations(
             simplex_tree, sign_convention="python"

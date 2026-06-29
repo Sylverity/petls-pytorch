@@ -8,8 +8,9 @@ Usage:
 
 Presets:
     quick      : Small datasets for CI/smoke testing (< 1 min)
-    standard   : Medium datasets, representative workloads (~ 5 min)
-    intensive  : Large datasets, GPU-worthy stress test (~ 30 min)
+    standard   : Representative CPU/GPU comparison workload
+    stress     : Large GPU stress test, may take a long time
+    intensive  : Very large GPU stress test (~30+ min)
     extreme    : Push hardware to its limits (> 1 hour)
 """
 
@@ -42,7 +43,57 @@ PRESETS = {
         ],
     },
     "standard": {
-        "name": "standard",
+        "name": "representative",
+        "configs": [
+            {
+                "dataset_name": "torus",
+                "n_points": 300,
+                "complex_type": "alpha",
+                "max_dim": 2,
+                "num_filtrations": 6,
+                "include_final_request": False,
+                "max_matrix_rows": 1800,
+            },
+            {
+                "dataset_name": "sphere",
+                "n_points": 250,
+                "complex_type": "alpha",
+                "max_dim": 2,
+                "num_filtrations": 6,
+                "include_final_request": False,
+                "max_matrix_rows": 1800,
+            },
+            {
+                "dataset_name": "swiss_roll",
+                "n_points": 300,
+                "complex_type": "alpha",
+                "max_dim": 2,
+                "num_filtrations": 6,
+                "include_final_request": False,
+                "max_matrix_rows": 1800,
+            },
+            {
+                "dataset_name": "klein_bottle",
+                "n_points": 250,
+                "complex_type": "alpha",
+                "max_dim": 2,
+                "num_filtrations": 6,
+                "include_final_request": False,
+                "max_matrix_rows": 1800,
+            },
+            {
+                "dataset_name": "torus",
+                "n_points": 90,
+                "complex_type": "rips",
+                "max_dim": 2,
+                "num_filtrations": 6,
+                "rips_threshold_quantile": 0.12,
+                "max_matrix_rows": 1800,
+            },
+        ],
+    },
+    "stress": {
+        "name": "stress",
         "configs": [
             {
                 "dataset_name": "torus",
@@ -50,6 +101,7 @@ PRESETS = {
                 "complex_type": "alpha",
                 "max_dim": 3,
                 "num_filtrations": 16,
+                "max_matrix_rows": 12000,
             },
             {
                 "dataset_name": "sphere",
@@ -57,6 +109,7 @@ PRESETS = {
                 "complex_type": "alpha",
                 "max_dim": 3,
                 "num_filtrations": 16,
+                "max_matrix_rows": 12000,
             },
             {
                 "dataset_name": "swiss_roll",
@@ -64,6 +117,7 @@ PRESETS = {
                 "complex_type": "alpha",
                 "max_dim": 3,
                 "num_filtrations": 16,
+                "max_matrix_rows": 12000,
             },
         ],
     },
@@ -152,11 +206,12 @@ Examples:
   # Quick smoke test
   python -m benchmark --preset quick --package petls-pytorch
 
-  # Reference PETLS run
+  # CPU/GPU comparison runs with the same workload
   python -m benchmark --preset standard --package petls --algorithm selfadjoint
+  python -m benchmark --preset standard --package petls-pytorch --algorithm eigvalsh --device cuda
 
-  # Intensive GPU stress test
-  python -m benchmark --preset intensive --package petls-pytorch --algorithm eigvalsh --device cuda
+  # GPU stress test
+  python -m benchmark --preset stress --package petls-pytorch --algorithm eigvalsh --device cuda
 
   # Single custom run
   python -m benchmark --dataset torus --n_points 5000 --complex alpha --max_dim 3 --package petls-pytorch
@@ -208,13 +263,22 @@ Examples:
         help="Backend package to benchmark (default: petls-pytorch)",
     )
     parser.add_argument(
-        "--output_dir", type=str, default="./benchmark_results", help="Directory to write results"
+        "--output_dir",
+        type=str,
+        default="./benchmark-results/results",
+        help="Directory to write results",
     )
     parser.add_argument(
         "--device",
         type=str,
         default="cpu",
         help="Device label for result tracking (cpu, cuda, etc.)",
+    )
+    parser.add_argument(
+        "--max_matrix_rows",
+        type=int,
+        default=None,
+        help="Skip eigensolves whose estimated matrix rows exceed this cap",
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--list", action="store_true", help="List available datasets and presets")
@@ -236,6 +300,7 @@ Examples:
         device=args.device,
         package=args.package,
         verbose=True,
+        max_matrix_rows=args.max_matrix_rows,
     )
 
     if args.preset:
@@ -268,6 +333,7 @@ Examples:
                 "num_filtrations": args.num_filtrations,
                 "filtration_mode": args.filtration_mode,
                 "seed": args.seed,
+                "max_matrix_rows": args.max_matrix_rows,
             }
         ],
     )

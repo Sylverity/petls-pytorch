@@ -135,6 +135,8 @@ def generate_dataset(
     cache_dir: Optional[str] = None,
     package: str = "petls-pytorch",
     device: Optional[str] = None,
+    compute_matrix_stats: bool = False,
+    rips_threshold_quantile: Optional[float] = None,
 ) -> dict:
     """
     Generate a complete benchmark dataset: point cloud -> complex -> sampled filtrations.
@@ -147,6 +149,9 @@ def generate_dataset(
         filtrations     : List[float] (sampled subset)
         all_filtrations : List[float] (full set)
         metadata        : dict
+
+    Matrix-size statistics are optional because computing them builds
+    persistent Laplacians and can dominate benchmark runtime.
     """
     package = package.lower()
     if package == "petls":
@@ -169,11 +174,17 @@ def generate_dataset(
     if complex_type.lower() == "alpha":
         complex_obj = Alpha(points=points.tolist(), max_dim=max_dim)
     elif complex_type.lower() == "rips":
-        # For Rips we need a threshold; set it to cover the diameter
         from scipy.spatial.distance import pdist
 
-        diam = pdist(points).max() * 1.1
-        complex_obj = Rips(points=points.tolist(), max_dim=max_dim, threshold=float(diam))
+        distances = pdist(points)
+        if rips_threshold_quantile is not None:
+            if not 0 < rips_threshold_quantile <= 1:
+                raise ValueError("rips_threshold_quantile must be in (0, 1]")
+            threshold = float(np.quantile(distances, rips_threshold_quantile))
+        else:
+            # Cover the diameter by default, matching the previous behavior.
+            threshold = float(distances.max() * 1.1)
+        complex_obj = Rips(points=points.tolist(), max_dim=max_dim, threshold=threshold)
     else:
         raise ValueError(f"complex_type must be 'alpha' or 'rips', got {complex_type}")
 
@@ -182,25 +193,26 @@ def generate_dataset(
 
     # Compute matrix size statistics at sampled filtrations
     matrix_stats = []
-    for f in sampled_filts:
-        for dim in range(max_dim + 1):
-            try:
-                L = complex_obj.get_L(dim, f, f)
-                matrix_stats.append(
-                    {
-                        "filtration": float(f),
-                        "dim": dim,
-                        "rows": int(L.shape[0]),
-                    }
-                )
-            except Exception:
-                matrix_stats.append(
-                    {
-                        "filtration": float(f),
-                        "dim": dim,
-                        "rows": 0,
-                    }
-                )
+    if compute_matrix_stats:
+        for f in sampled_filts:
+            for dim in range(max_dim + 1):
+                try:
+                    L = complex_obj.get_L(dim, f, f)
+                    matrix_stats.append(
+                        {
+                            "filtration": float(f),
+                            "dim": dim,
+                            "rows": int(L.shape[0]),
+                        }
+                    )
+                except Exception:
+                    matrix_stats.append(
+                        {
+                            "filtration": float(f),
+                            "dim": dim,
+                            "rows": 0,
+                        }
+                    )
 
     result = {
         "name": name,
@@ -219,6 +231,8 @@ def generate_dataset(
             "filtration_mode": filtration_mode,
             "package": package,
             "device": device,
+            "compute_matrix_stats": compute_matrix_stats,
+            "rips_threshold_quantile": rips_threshold_quantile,
             **DATASET_REGISTRY[name]["params"],
         },
     }

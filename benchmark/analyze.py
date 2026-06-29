@@ -76,17 +76,22 @@ def analyze_file(path: str, plot_dir: Optional[str] = None) -> Dict:
     rows = load_csv(path)
     if not rows:
         return {}
+    completed_rows = [r for r in rows if str(r.get("skipped", "False")).lower() != "true"]
+    skipped_rows = [r for r in rows if str(r.get("skipped", "False")).lower() == "true"]
+    timing_rows = completed_rows or rows
 
-    sizes = numeric(rows, "matrix_rows")
-    build = numeric(rows, "build_time_ms")
-    eigs = numeric(rows, "eigs_time_ms")
-    total = numeric(rows, "total_time_ms")
-    dims = np.array([int(r["dim"]) for r in rows])
+    sizes = numeric(timing_rows, "matrix_rows")
+    build = numeric(timing_rows, "build_time_ms")
+    eigs = numeric(timing_rows, "eigs_time_ms")
+    total = numeric(timing_rows, "total_time_ms")
+    dims = np.array([int(r["dim"]) for r in timing_rows])
 
     # Overall stats
     overall = {
         "file": Path(path).name,
         "trials": len(rows),
+        "completed": len(completed_rows),
+        "skipped": len(skipped_rows),
         "total_time_sec": float(np.sum(total)) / 1000.0,
         "max_matrix": int(np.max(sizes)),
         "mean_matrix": int(np.mean(sizes)),
@@ -96,6 +101,8 @@ def analyze_file(path: str, plot_dir: Optional[str] = None) -> Dict:
     print(f"  Analysis: {overall['file']}")
     print(f"{'=' * 60}")
     print(f"  Trials:       {overall['trials']}")
+    print(f"  Completed:    {overall['completed']}")
+    print(f"  Skipped:      {overall['skipped']}")
     print(f"  Total time:   {overall['total_time_sec']:.2f} s")
     print(f"  Max matrix:   {overall['max_matrix']} x {overall['max_matrix']}")
     print(f"  Mean matrix:  {overall['mean_matrix']} x {overall['mean_matrix']}")
@@ -267,7 +274,8 @@ def main():
         print(f"{'=' * 60}")
         for s in summaries:
             print(
-                f"  {s['file']:40s} | {s['trials']:4d} trials | {s['total_time_sec']:8.1f}s | max={s['max_matrix']:6d}"
+                f"  {s['file']:40s} | {s['completed']:4d}/{s['trials']:<4d} done | "
+                f"{s['total_time_sec']:8.1f}s | max={s['max_matrix']:6d}"
             )
         print(f"{'=' * 60}\n")
 

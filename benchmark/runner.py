@@ -13,7 +13,7 @@ import time
 import json
 import csv
 from dataclasses import dataclass, field, asdict
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Callable
 from pathlib import Path
 import numpy as np
 
@@ -40,6 +40,11 @@ class BenchmarkResult:
     algorithm: str = "eigvalsh"
     device: str = "cpu"
     seed: int = 42
+    config_index: int = 0
+    request_index: int = 0
+    complex_build_time_ms: float = 0.0
+    skipped: bool = False
+    skip_reason: str = ""
 
 
 @dataclass
@@ -68,11 +73,20 @@ class BenchmarkSuiteResult:
         build_times = [r.build_time_ms for r in self.results]
         eigs_times = [r.eigs_time_ms for r in self.results]
         sizes = [r.matrix_rows for r in self.results]
+        completed = [r for r in self.results if not r.skipped]
+        skipped = [r for r in self.results if r.skipped]
+        config_builds = {}
+        for r in self.results:
+            key = (r.config_index, r.dataset, r.n_points, r.complex_type, r.max_dim, r.seed)
+            config_builds.setdefault(key, r.complex_build_time_ms)
 
         return {
             "suite_name": self.suite_name,
             "num_trials": len(self.results),
+            "num_completed": len(completed),
+            "num_skipped": len(skipped),
             "total_time_sec": sum(total_times) / 1000.0,
+            "complex_build_time_sec": sum(config_builds.values()) / 1000.0,
             "mean_total_ms": np.mean(total_times),
             "median_total_ms": np.median(total_times),
             "max_total_ms": max(total_times),
@@ -87,7 +101,10 @@ class BenchmarkSuiteResult:
         print("\n" + "=" * 60)
         print(f"  Benchmark Suite: {s['suite_name']}")
         print(f"  Trials:          {s['num_trials']}")
-        print(f"  Total wall time: {s['total_time_sec']:.2f} s")
+        print(f"  Completed:       {s['num_completed']}")
+        print(f"  Skipped:         {s['num_skipped']}")
+        print(f"  Trial time:      {s['total_time_sec']:.2f} s")
+        print(f"  Complex builds:  {s['complex_build_time_sec']:.2f} s")
         print(f"  Mean trial:      {s['mean_total_ms']:.1f} ms")
         print(f"  Median trial:    {s['median_total_ms']:.1f} ms")
         print(f"  Slowest trial:   {s['max_total_ms']:.1f} ms")
@@ -106,6 +123,7 @@ class BenchmarkRunner:
         device: str = "cpu",
         package: str = "petls-pytorch",
         verbose: bool = True,
+        max_matrix_rows: Optional[int] = None,
     ):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -113,6 +131,34 @@ class BenchmarkRunner:
         self.device = device
         self.package = package.lower()
         self.verbose = verbose
+        self.max_matrix_rows = max_matrix_rows
+
+    @staticmethod
+    def _result_fieldnames() -> list[str]:
+        return list(asdict(BenchmarkResult(package="", dataset="", n_points=0, complex_type="", max_dim=0, dim=0, filtration_a=0.0, filtration_b=0.0, matrix_rows=0)).keys())
+
+    def _print(self, message: str = "") -> None:
+        if self.verbose:
+            print(message, flush=True)
+
+    def _estimate_matrix_rows(self, complex_obj, dim: int, a: float) -> Optional[int]:
+        if not hasattr(complex_obj, "filtered_boundaries"):
+            return None
+        if dim == 0:
+            if len(complex_obj.filtered_boundaries) <= 1:
+                return 0
+            return complex_obj.filtered_boundaries[1].index_of_filtration(False, a) + 1
+        if dim > complex_obj.top_dim:
+            return 0
+        return complex_obj.filtered_boundaries[dim].index_of_filtration(True, a) + 1
+
+    def _write_partial_result(self, path: Path, result: BenchmarkResult) -> None:
+        exists = path.exists()
+        with open(path, "a", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=self._result_fieldnames())
+            if not exists:
+                writer.writeheader()
+            writer.writerow(asdict(result))
 
     def run_trial(
         self,
@@ -126,6 +172,12 @@ class BenchmarkRunner:
         dims: Optional[List[int]] = None,
         filtration_pairs: Optional[List[tuple]] = None,
         package: Optional[str] = None,
+        config_index: int = 0,
+        max_matrix_rows: Optional[int] = None,
+        include_final_request: bool = True,
+        compute_matrix_stats: bool = False,
+        rips_threshold_quantile: Optional[float] = None,
+        on_result: Optional[Callable[[BenchmarkResult], None]] = None,
     ) -> List[BenchmarkResult]:
         """
         Run a single benchmark trial for one dataset at one scale.
@@ -159,12 +211,11 @@ class BenchmarkRunner:
 
         package = (self.package if package is None else package).lower()
 
-        if self.verbose:
-            print(
-                f"\n[Benchmark] {dataset_name} | n={n_points} | {complex_type} | "
-                f"max_dim={max_dim} | package={package}"
-            )
-            print("-" * 60)
+        self._print(
+            f"\n[Benchmark] #{config_index} {dataset_name} | n={n_points} | {complex_type} | "
+            f"max_dim={max_dim} | package={package} | device={self.device}"
+        )
+        self._print("-" * 60)
 
         # Build dataset & complex
         t0 = time.perf_counter()
@@ -178,12 +229,13 @@ class BenchmarkRunner:
             seed=seed,
             package=package,
             device=self.device if package == "petls-pytorch" else None,
+            compute_matrix_stats=compute_matrix_stats,
+            rips_threshold_quantile=rips_threshold_quantile,
         )
         t_build_complex = (time.perf_counter() - t0) * 1000
-        if self.verbose:
-            print(f"  Complex build:   {t_build_complex:.1f} ms")
-            print(f"  Unique filtrations: {ds['num_unique_filtrations']}")
-            print(f"  Sampled filtrations: {len(ds['filtrations'])}")
+        self._print(f"  Complex build:       {t_build_complex:.1f} ms")
+        self._print(f"  Unique filtrations:  {ds['num_unique_filtrations']}")
+        self._print(f"  Sampled filtrations: {len(ds['filtrations'])}")
 
         complex_obj = ds["complex"]
         complex_obj.set_eigs_Algorithm(self.algorithm)
@@ -199,9 +251,9 @@ class BenchmarkRunner:
                 a, b = filtrations[i], filtrations[i + 1]
                 for dim in dims:
                     requests.append((dim, a, b))
-            # Add final (a,a) case
-            for dim in dims:
-                requests.append((dim, filtrations[-1], filtrations[-1]))
+            if include_final_request:
+                for dim in dims:
+                    requests.append((dim, filtrations[-1], filtrations[-1]))
         else:
             requests = []
             for a, b in filtration_pairs:
@@ -210,26 +262,86 @@ class BenchmarkRunner:
 
         results: List[BenchmarkResult] = []
 
-        for dim, a, b in requests:
+        row_cap = max_matrix_rows if max_matrix_rows is not None else self.max_matrix_rows
+        for request_index, (dim, a, b) in enumerate(requests, start=1):
+            rows_estimate = self._estimate_matrix_rows(complex_obj, dim, a)
+            if row_cap is not None and rows_estimate is not None and rows_estimate > row_cap:
+                result = BenchmarkResult(
+                    package=package,
+                    dataset=dataset_name,
+                    n_points=n_points,
+                    complex_type=complex_type,
+                    max_dim=max_dim,
+                    dim=dim,
+                    filtration_a=round(a, 6),
+                    filtration_b=round(b, 6),
+                    matrix_rows=rows_estimate,
+                    algorithm=self.algorithm,
+                    device=self.device,
+                    seed=seed,
+                    config_index=config_index,
+                    request_index=request_index,
+                    complex_build_time_ms=t_build_complex,
+                    skipped=True,
+                    skip_reason=f"matrix_rows>{row_cap}",
+                )
+                results.append(result)
+                if on_result is not None:
+                    on_result(result)
+                self._print(
+                    f"  [{request_index:02d}/{len(requests):02d}] dim={dim} "
+                    f"a={a:.4f} b={b:.4f} | size~{rows_estimate:5d} | SKIP {result.skip_reason}"
+                )
+                continue
+
             # Matrix construction time
             t0 = time.perf_counter()
             try:
                 L = complex_obj.get_L(dim, a, b)
             except Exception as e:
-                if self.verbose:
-                    print(f"    ERROR get_L(dim={dim}, a={a:.4f}, b={b:.4f}): {e}")
+                self._print(f"    ERROR get_L(dim={dim}, a={a:.4f}, b={b:.4f}): {e}")
                 continue
             t_build = (time.perf_counter() - t0) * 1000
 
             rows = int(L.shape[0])
+            if row_cap is not None and rows > row_cap:
+                result = BenchmarkResult(
+                    package=package,
+                    dataset=dataset_name,
+                    n_points=n_points,
+                    complex_type=complex_type,
+                    max_dim=max_dim,
+                    dim=dim,
+                    filtration_a=round(a, 6),
+                    filtration_b=round(b, 6),
+                    matrix_rows=rows,
+                    build_time_ms=t_build,
+                    total_time_ms=t_build,
+                    algorithm=self.algorithm,
+                    device=self.device,
+                    seed=seed,
+                    config_index=config_index,
+                    request_index=request_index,
+                    complex_build_time_ms=t_build_complex,
+                    skipped=True,
+                    skip_reason=f"matrix_rows>{row_cap}",
+                )
+                results.append(result)
+                if on_result is not None:
+                    on_result(result)
+                self._print(
+                    f"  [{request_index:02d}/{len(requests):02d}] dim={dim} "
+                    f"a={a:.4f} b={b:.4f} | size={rows:5d} | build={t_build:8.1f}ms | "
+                    f"SKIP {result.skip_reason}"
+                )
+                continue
 
             # Eigenvalue time
             t0 = time.perf_counter()
             try:
                 eigs = complex_obj.spectra(dim, a, b)
             except Exception as e:
-                if self.verbose:
-                    print(f"    ERROR spectra(dim={dim}, a={a:.4f}, b={b:.4f}): {e}")
+                self._print(f"    ERROR spectra(dim={dim}, a={a:.4f}, b={b:.4f}): {e}")
                 continue
             t_eigs = (time.perf_counter() - t0) * 1000
 
@@ -254,15 +366,19 @@ class BenchmarkRunner:
                 algorithm=self.algorithm,
                 device=self.device,
                 seed=seed,
+                config_index=config_index,
+                request_index=request_index,
+                complex_build_time_ms=t_build_complex,
             )
             results.append(result)
+            if on_result is not None:
+                on_result(result)
 
-            if self.verbose and rows > 100:
-                print(
-                    f"  dim={dim} a={a:.4f} b={b:.4f} | "
-                    f"size={rows:5d} | build={t_build:8.1f}ms | eigs={t_eigs:8.1f}ms | "
-                    f"betti={betti}"
-                )
+            self._print(
+                f"  [{request_index:02d}/{len(requests):02d}] dim={dim} a={a:.4f} b={b:.4f} | "
+                f"size={rows:5d} | build={t_build:8.1f}ms | eigs={t_eigs:8.1f}ms | "
+                f"betti={betti}"
+            )
 
         return results
 
@@ -283,16 +399,24 @@ class BenchmarkRunner:
         """
         suite = BenchmarkSuiteResult(suite_name=name)
         suite.start_time = time.perf_counter()
+        csv_path = self.output_dir / f"{name}.csv"
+        summary_path = self.output_dir / f"{name}_summary.json"
+        if csv_path.exists():
+            csv_path.unlink()
 
-        for cfg in configs:
-            results = self.run_trial(**cfg)
-            suite.results.extend(results)
+        def on_result(result: BenchmarkResult) -> None:
+            suite.results.append(result)
+            self._write_partial_result(csv_path, result)
+            with open(summary_path, "w") as f:
+                json.dump(suite.summary(), f, indent=2)
+
+        for config_index, cfg in enumerate(configs, start=1):
+            self.run_trial(config_index=config_index, on_result=on_result, **cfg)
 
         suite.end_time = time.perf_counter()
 
-        # Save
-        suite.to_csv(str(self.output_dir / f"{name}.csv"))
-        with open(self.output_dir / f"{name}_summary.json", "w") as f:
+        suite.to_csv(str(csv_path))
+        with open(summary_path, "w") as f:
             json.dump(suite.summary(), f, indent=2)
 
         if self.verbose:

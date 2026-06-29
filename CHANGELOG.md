@@ -1,11 +1,22 @@
 # Changelog
 
-## Unreleased
+## 1.0.2 - 2026-06-28
 
 ### Changed
 
 - Aligned public package, documentation, and benchmark naming on `petls-pytorch`;
   the Python import package remains `petls_pytorch`.
+- Updated benchmark presets and reporting for representative Windows CPU/GPU
+  comparisons, including streamed progress, partial CSV/JSON output, skipped
+  rows, and matrix-size caps.
+- Changed benchmark outputs to default under `benchmark-results/`.
+
+### Fixed
+
+- Fixed Rips complex construction to build the extra simplex dimension needed
+  for top requested Laplacian dimensions, matching original PETLS Betti values.
+- Avoided hidden benchmark setup work by making matrix statistics optional and
+  bounding the representative Rips threshold.
 
 ## 1.0.1 - 2026-06-28
 
