@@ -58,6 +58,21 @@ def _sparse_gram(B: torch.Tensor, transpose_left: bool, dtype: torch.dtype) -> t
         return B_dense @ B_dense.T
 
 
+def _laplacian_rows(
+    dim: int,
+    a: float,
+    filtered_boundaries: list[FilteredBoundaryMatrix],
+    top_dim: int,
+) -> int:
+    if dim == 0:
+        if top_dim == 0:
+            return filtered_boundaries[0].index_of_filtration(True, a) + 1
+        return filtered_boundaries[1].index_of_filtration(False, a) + 1
+    if dim > top_dim:
+        return 0
+    return filtered_boundaries[dim].index_of_filtration(True, a) + 1
+
+
 def get_down(
     fbm: FilteredBoundaryMatrix,
     a: float,
@@ -180,19 +195,30 @@ def get_up(
     B_block = C.T
     D = L_up_b[a_rows:b_rows, a_rows:b_rows]
 
-    # D is SPD in theory but can be singular when some rows of B_pers are
-    # zero. The original C++ uses LDLT which handles semidefinite matrices;
-    # we fall back to the pseudoinverse for numerical stability.
-    if D.device.type == "cpu" and D.shape[0] <= 128 and bool(torch.any(D.diagonal() <= 0)):
-        X = torch.linalg.pinv(D, hermitian=True) @ C
+    # D is SPD in theory but can be singular when some future rows have no
+    # incident columns. For Gram matrices those zero diagonal rows/columns
+    # contribute nothing to the Schur complement, so trim them before solving.
+    active = D.diagonal() > 0
+    if not bool(torch.all(active)):
+        if not bool(torch.any(active)):
+            return _symmetrize_lower(A)
+        D_solve = D[active][:, active]
+        C_solve = C[active]
+        B_solve = C_solve.T
     else:
-        try:
-            L_chol = torch.linalg.cholesky(D)
-            X = torch.cholesky_solve(C, L_chol)
-        except RuntimeError:
-            X = torch.linalg.pinv(D, hermitian=True) @ C
+        D_solve = D
+        C_solve = C
+        B_solve = B_block
 
-    L_up = A - B_block @ X
+    # The original C++ uses LDLT which handles semidefinite matrices; fall back
+    # to the pseudoinverse if the remaining active block is still singular.
+    try:
+        L_chol = torch.linalg.cholesky(D_solve)
+        X = torch.cholesky_solve(C_solve, L_chol)
+    except RuntimeError:
+        X = torch.linalg.pinv(D_solve, hermitian=True) @ C_solve
+
+    L_up = A - B_solve @ X
     L_up = _symmetrize_lower(L_up)
 
     return L_up
@@ -216,14 +242,12 @@ def get_L(
     """
     target_device = device if device is not None else get_device()
     dtype = get_dtype()
+    l_rows = _laplacian_rows(dim, a, filtered_boundaries, top_dim)
+
+    if l_rows == 0:
+        return torch.empty(0, 0, dtype=dtype, device=target_device)
 
     if target_device.type == "cuda":
-        if dim == 0:
-            l_rows = filtered_boundaries[1].index_of_filtration(False, a) + 1
-        elif dim > top_dim:
-            l_rows = 0
-        else:
-            l_rows = filtered_boundaries[dim].index_of_filtration(True, a) + 1
         if 0 <= l_rows <= _CUDA_CPU_BUILD_FALLBACK_ROWS:
             cpu_boundaries = [fbm.cpu_mirror for fbm in filtered_boundaries]
             if all(fbm is not None for fbm in cpu_boundaries):
@@ -236,6 +260,9 @@ def get_L(
                     torch.device("cpu"),
                 )
                 return L_cpu.to(device=target_device, dtype=dtype)
+
+    if dim == 0 and top_dim == 0:
+        return torch.zeros(l_rows, l_rows, dtype=dtype, device=target_device)
 
     if dim == 0:
         return get_up(filtered_boundaries[1], a, b, target_device)

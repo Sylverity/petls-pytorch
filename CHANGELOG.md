@@ -43,19 +43,23 @@
 - Mark filtered COO submatrices as coalesced at construction time instead of
   running a redundant coalesce pass, avoiding cache-fill overhead for first-use
   Rips and Alpha Laplacian builds.
+- Return empty Laplacians directly from `get_L()` when the requested row count
+  is known to be zero, and trim zero diagonal rows out of Schur-complement
+  blocks before falling back to a Hermitian pseudoinverse.
 - Checkpoint CPU standard preset on Windows:
   - PETLS direct-eigensolve baseline: `9.65 s` trial time, `0.61 s` complex
     builds.
-  - PETLS-PyTorch: `1.35 s` trial time, `0.55 s` complex builds.
+  - PETLS-PyTorch: `1.35 s` trial time, `0.57 s` complex builds.
 - Checkpoint CUDA standard preset on Windows:
-  - PETLS-PyTorch CUDA: `0.67 s` trial time, `0.64 s` complex builds.
+  - PETLS-PyTorch CUDA: `0.64 s` trial time, `0.59 s` complex builds.
   - Remaining row-wise misses against PETLS baseline:
-    - CPU: `9` total-time misses, `2` non-empty total-time misses, and no
+    - CPU: `6` total-time misses, `2` non-empty total-time misses, and no
       non-empty eigensolve-time misses out of `75` completed rows.
-    - CUDA: `19` total-time misses, with `10` non-empty total-time misses and
-      `4` non-empty eigensolve-time misses out
+    - CUDA: `18` total-time misses, with `9` non-empty total-time misses and
+      `2` non-empty eigensolve-time misses out
       of `75` completed rows.
-    - CUDA total-time overage dropped again to `9.56 ms`.
+    - CPU total-time overage is now `2.42 ms`; CUDA total-time overage dropped
+      again to `7.55 ms`.
     - The aggregate trial time target is met, but the all-rows stopping
       condition is still open.
 
