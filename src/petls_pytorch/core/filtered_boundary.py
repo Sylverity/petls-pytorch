@@ -53,12 +53,20 @@ class FilteredBoundaryMatrix:
             self.matrix.coalesce() if self.matrix.layout == torch.sparse_coo else self.matrix
         )
         self._submatrix_cache: dict[tuple[float, bool], torch.Tensor] = {}
+        self._incidence_data: tuple[torch.Tensor, torch.Tensor] | bool | None = None
 
         # Ensure sorted filtrations (required for index_of_filtration correctness)
         if not torch.all(self.domain_filtrations[:-1] <= self.domain_filtrations[1:]):
             raise ValueError("domain_filtrations must be non-decreasing")
         if not torch.all(self.range_filtrations[:-1] <= self.range_filtrations[1:]):
             raise ValueError("range_filtrations must be non-decreasing")
+
+        if (
+            self.device.type == "cpu"
+            and self.num_cols > 0
+            and self._coalesced_matrix._nnz() == 2 * self.num_cols
+        ):
+            self._get_incidence_data()
 
     @property
     def shape(self) -> tuple[int, int]:
@@ -133,6 +141,78 @@ class FilteredBoundaryMatrix:
         result = submatrix.coalesce() if return_coo else submatrix
         self._submatrix_cache[cache_key] = result
         return result
+
+    def incidence_laplacian(
+        self,
+        max_row: int,
+        max_col: int,
+        dtype: torch.dtype,
+        device: torch.device | str | None = None,
+    ) -> torch.Tensor | None:
+        """Return ``B @ B.T`` for cached two-entry incidence columns, if applicable."""
+        target_device = torch.device(device) if device is not None else self.device
+        if target_device.type != "cpu":
+            return None
+
+        if max_col < 0:
+            n_rows = max_row + 1
+            return torch.zeros(n_rows, n_rows, dtype=dtype, device=target_device)
+
+        incidence_data = self._get_incidence_data()
+        if incidence_data is None:
+            return None
+
+        row_pairs, value_pairs = incidence_data
+        n_rows = max_row + 1
+        n_cols = min(max_col + 1, row_pairs.shape[0])
+
+        rows = row_pairs[:n_cols].to(device=target_device)
+        values = value_pairs[:n_cols].to(device=target_device, dtype=dtype)
+        valid = (rows[:, 0] < n_rows) & (rows[:, 1] < n_rows)
+        if not bool(torch.all(valid)):
+            rows = rows[valid]
+            values = values[valid]
+
+        L = torch.zeros(n_rows, n_rows, dtype=dtype, device=target_device)
+        if rows.numel() == 0:
+            return L
+
+        r0 = rows[:, 0]
+        r1 = rows[:, 1]
+        v0 = values[:, 0]
+        v1 = values[:, 1]
+        L.index_put_((r0, r0), v0 * v0, accumulate=True)
+        L.index_put_((r1, r1), v1 * v1, accumulate=True)
+        offdiag = v0 * v1
+        L.index_put_((r0, r1), offdiag, accumulate=True)
+        L.index_put_((r1, r0), offdiag, accumulate=True)
+        return L
+
+    def _get_incidence_data(self) -> tuple[torch.Tensor, torch.Tensor] | None:
+        if self._incidence_data is False:
+            return None
+        if self._incidence_data is not None:
+            return self._incidence_data
+
+        if self.num_cols == 0:
+            empty_rows = torch.empty((0, 2), dtype=torch.long, device=self.device)
+            empty_values = torch.empty((0, 2), dtype=self.matrix.dtype, device=self.device)
+            self._incidence_data = (empty_rows, empty_values)
+            return self._incidence_data
+
+        coo = self._coalesced_matrix
+        indices = coo.indices()
+        cols = indices[1]
+        counts = torch.bincount(cols, minlength=self.num_cols)
+        if not bool(torch.all(counts == 2)):
+            self._incidence_data = False
+            return None
+
+        order = torch.argsort(cols)
+        row_pairs = indices[0, order].reshape(self.num_cols, 2)
+        value_pairs = coo.values()[order].reshape(self.num_cols, 2)
+        self._incidence_data = (row_pairs, value_pairs)
+        return self._incidence_data
 
     def transpose(self) -> FilteredBoundaryMatrix:
         """Return the transposed boundary matrix with swapped filtrations."""

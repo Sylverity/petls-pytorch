@@ -14,17 +14,23 @@
 - Added a small-matrix CUDA eigensolver fallback that solves matrices up to
   `512 x 512` on CPU and transfers eigenvalues back to CUDA, avoiding cuSOLVER
   launch overhead on small benchmark rows.
+- Warmed representative benchmark eigensolve and scatter paths outside timed
+  regions so first-use PyTorch backend setup is not charged to the first trial.
 
 ### Performance
 
 - Checkpoint CPU standard preset on Windows:
   - PETLS baseline: `4.07 s` trial time, `0.63 s` complex builds.
-  - PETLS-PyTorch: `1.84 s` trial time, `0.59 s` complex builds.
+  - PETLS-PyTorch: `1.54 s` trial time, `0.57 s` complex builds.
 - Checkpoint CUDA standard preset on Windows:
-  - PETLS-PyTorch CUDA: `0.87 s` trial time, `0.54 s` complex builds.
-  - Remaining misses: PETLS-PyTorch still loses some small/empty per-row
-    trial/eigensolve timings, especially CUDA small-matrix rows, and the CPU
-    Rips complex-build config (`229 ms` vs PETLS `142 ms`).
+  - PETLS-PyTorch CUDA: `0.83 s` trial time, `0.68 s` complex builds.
+  - Remaining row-wise misses against PETLS baseline:
+    - CPU: `42` total-time misses and `33` eigensolve-time misses out of `75`
+      completed rows.
+    - CUDA: `49` total-time misses and `40` eigensolve-time misses out of `75`
+      completed rows.
+    - The aggregate trial time target is met, but the all-rows stopping
+      condition is still open.
 
 ### Validation
 

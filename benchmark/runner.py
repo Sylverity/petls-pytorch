@@ -146,6 +146,7 @@ class BenchmarkRunner:
         if package == "petls-pytorch":
             import petls_pytorch
             import torch
+            from petls_pytorch.core.eigenvalues import solve_eigenvalues
 
             petls_pytorch.set_device(self.device)
             device = torch.device(self.device)
@@ -153,10 +154,18 @@ class BenchmarkRunner:
             sparse = dense.to_sparse_coo()
             _ = sparse.to_dense() @ dense
             _ = torch.linalg.eigvalsh(dense)
-            _ = torch.linalg.eigvalsh(torch.eye(16))
+            _ = torch.linalg.eigvalsh(torch.eye(300))
+            scatter_target = torch.zeros(512, 512, device=device)
+            scatter_index = torch.arange(512, device=device)
+            scatter_target.index_put_(
+                (scatter_index, scatter_index),
+                torch.ones(512, device=device),
+                accumulate=True,
+            )
             if self.device.startswith("cuda"):
                 if torch.cuda.is_available():
                     torch.empty(1, device=self.device)
+                    _ = solve_eigenvalues(torch.eye(300, device=device), self.algorithm)
                     torch.cuda.synchronize()
         elif package == "petls":
             import petls  # noqa: F401

@@ -11,6 +11,8 @@ Reference: Memoli, Wan, Wang 2020 (Schur complement algorithm).
 
 from __future__ import annotations
 
+import warnings
+
 import torch
 from typing import TYPE_CHECKING
 
@@ -26,6 +28,32 @@ def _symmetrize_lower(L: torch.Tensor) -> torch.Tensor:
     """
     L_tril = torch.tril(L)
     return L_tril + L_tril.T - torch.diag(L_tril.diagonal())
+
+
+def _sparse_gram(B: torch.Tensor, transpose_left: bool, dtype: torch.dtype) -> torch.Tensor:
+    """Compute a sparse boundary Gram matrix and return a dense tensor."""
+    B = B.to(dtype=dtype)
+    if B.device.type != "cpu":
+        B_dense = B.to_dense()
+        if transpose_left:
+            return B_dense.T @ B_dense
+        return B_dense @ B_dense.T
+
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="Sparse CSR tensor support is in beta state.*",
+                category=UserWarning,
+            )
+            if transpose_left:
+                return torch.sparse.mm(B.t(), B).to_dense()
+            return torch.sparse.mm(B, B.t()).to_dense()
+    except RuntimeError:
+        B_dense = B.to_dense()
+        if transpose_left:
+            return B_dense.T @ B_dense
+        return B_dense @ B_dense.T
 
 
 def get_down(
@@ -53,22 +81,29 @@ def get_down(
         Dense symmetric matrix of shape (n, n) where n is the number of
         dim-simplices present at filtration a.
     """
+    target_device = device if device is not None else fbm.device
+    dtype = get_dtype()
+    col_idx = fbm.index_of_filtration(use_domain=True, a=a)
+    if col_idx < 0:
+        return torch.empty(0, 0, dtype=dtype, device=target_device)
+
+    row_idx = fbm.index_of_filtration(use_domain=False, a=a)
+    if row_idx < 0:
+        n_cols = col_idx + 1
+        return torch.zeros(n_cols, n_cols, dtype=dtype, device=target_device)
+
     B = fbm.submatrix_at_filtration(a)
 
     if B.shape[0] == 0 or B.shape[1] == 0:
         # Empty or degenerate boundary → zero Laplacian
-        target_device = device if device is not None else B.device
         return torch.zeros(
             B.shape[1],
             B.shape[1],
-            dtype=get_dtype(),
+            dtype=dtype,
             device=target_device,
         )
 
-    # Sparse → dense, then dense GEMM (fast on GPU)
-    B_dense = B.to_dense().to(dtype=get_dtype())
-    L_down = B_dense.T @ B_dense
-    return L_down
+    return _sparse_gram(B, transpose_left=True, dtype=dtype)
 
 
 def get_up(
@@ -118,9 +153,11 @@ def get_up(
         # No new dim-simplices between a and b → standard up-Laplacian at b
         if b_col < 0:
             return torch.zeros(a_row + 1, a_row + 1, dtype=dtype, device=target_device)
+        incidence_L = fbm.incidence_laplacian(b_row, b_col, dtype, target_device)
+        if incidence_L is not None:
+            return incidence_L
         B_pers = fbm.submatrix_at_filtration(b)
-        B_dense = B_pers.to_dense().to(dtype=dtype)
-        return B_dense @ B_dense.T
+        return _sparse_gram(B_pers, transpose_left=False, dtype=dtype)
 
     if a_row == -1:
         # No dim-simplices at a
@@ -131,9 +168,7 @@ def get_up(
         return torch.zeros(a_row + 1, a_row + 1, dtype=dtype, device=target_device)
 
     B_pers = fbm.submatrix_at_filtration(b)
-    B_dense = B_pers.to_dense().to(dtype=dtype)
-
-    L_up_b = B_dense @ B_dense.T
+    L_up_b = _sparse_gram(B_pers, transpose_left=False, dtype=dtype)
 
     a_rows = a_row + 1
     b_rows = b_row + 1
