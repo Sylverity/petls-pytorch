@@ -33,15 +33,20 @@
 - Skip the guaranteed-failing CPU Cholesky attempt for small Schur-complement
   blocks with a non-positive diagonal entry and go directly to the Hermitian
   pseudoinverse fallback.
+- Assemble CPU two-entry incidence Laplacians through NumPy for small graph
+  boundary matrices, reducing PyTorch scatter overhead on Rips dimension-0
+  rows.
 - Checkpoint CPU standard preset on Windows:
   - PETLS direct-eigensolve baseline: `9.65 s` trial time, `0.61 s` complex
     builds.
-  - PETLS-PyTorch: `1.50 s` trial time, `0.60 s` complex builds.
+  - PETLS-PyTorch: `1.51 s` trial time, `0.58 s` complex builds.
 - Checkpoint CUDA standard preset on Windows:
   - PETLS-PyTorch CUDA: `0.71 s` trial time, `0.64 s` complex builds.
+  - This iteration's CPU-only incidence path did not improve CUDA; reruns were
+    noisy at `0.74-0.77 s` trial time.
   - Remaining row-wise misses against PETLS baseline:
-    - CPU: `11` total-time misses and no non-empty eigensolve-time misses out
-      of `75` completed rows.
+    - CPU: `10` total-time misses, `3` non-empty total-time misses, and no
+      non-empty eigensolve-time misses out of `75` completed rows.
     - CUDA: `21` total-time misses and `3` non-empty eigensolve-time misses out
       of `75` completed rows.
     - The aggregate trial time target is met, but the all-rows stopping

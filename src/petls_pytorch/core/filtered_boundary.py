@@ -165,6 +165,30 @@ class FilteredBoundaryMatrix:
         row_pairs, value_pairs = incidence_data
         n_rows = max_row + 1
         n_cols = min(max_col + 1, row_pairs.shape[0])
+        if target_device.type == "cpu" and row_pairs.device.type == "cpu":
+            import numpy as np
+
+            rows_np = row_pairs[:n_cols].numpy()
+            values_np = value_pairs[:n_cols].numpy().astype(
+                np.float64 if dtype == torch.float64 else np.float32,
+                copy=False,
+            )
+            valid = (rows_np[:, 0] < n_rows) & (rows_np[:, 1] < n_rows)
+            rows_np = rows_np[valid]
+            values_np = values_np[valid]
+
+            L_np = np.zeros((n_rows, n_rows), dtype=values_np.dtype)
+            if rows_np.size:
+                r0 = rows_np[:, 0]
+                r1 = rows_np[:, 1]
+                v0 = values_np[:, 0]
+                v1 = values_np[:, 1]
+                np.add.at(L_np, (r0, r0), v0 * v0)
+                np.add.at(L_np, (r1, r1), v1 * v1)
+                offdiag = v0 * v1
+                np.add.at(L_np, (r0, r1), offdiag)
+                np.add.at(L_np, (r1, r0), offdiag)
+            return torch.from_numpy(L_np)
 
         rows = row_pairs[:n_cols].to(device=target_device)
         values = value_pairs[:n_cols].to(device=target_device, dtype=dtype)
