@@ -153,6 +153,7 @@ class BenchmarkRunner:
             sparse = dense.to_sparse_coo()
             _ = sparse.to_dense() @ dense
             _ = torch.linalg.eigvalsh(dense)
+            _ = torch.linalg.eigvalsh(torch.eye(16))
             if self.device.startswith("cuda"):
                 if torch.cuda.is_available():
                     torch.empty(1, device=self.device)

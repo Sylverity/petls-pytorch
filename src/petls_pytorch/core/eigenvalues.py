@@ -17,6 +17,7 @@ from typing import Callable
 
 # Registry of named solvers
 SOLVERS: dict[str, Callable[[torch.Tensor], torch.Tensor]] = {}
+_CUDA_CPU_FALLBACK_ROWS = 512
 
 
 def _register_defaults() -> None:
@@ -28,6 +29,9 @@ def _register_defaults() -> None:
             return torch.empty(0, device=L.device, dtype=L.dtype)
         if L.shape[0] == 1:
             return L.diagonal().real
+        if L.device.type == "cuda" and L.shape[0] <= _CUDA_CPU_FALLBACK_ROWS:
+            vals = torch.linalg.eigvalsh(L.cpu()).to(device=L.device)
+            return torch.sort(vals).values
         # torch.linalg.eigvalsh is fast on GPU for dense symmetric matrices
         vals = torch.linalg.eigvalsh(L)
         return torch.sort(vals).values
@@ -41,6 +45,10 @@ def _register_defaults() -> None:
             val = L.diagonal().real
             vec = torch.ones_like(val).unsqueeze(0)
             return val, vec
+        if L.device.type == "cuda" and L.shape[0] <= _CUDA_CPU_FALLBACK_ROWS:
+            vals, vecs = torch.linalg.eigh(L.cpu())
+            idx = torch.argsort(vals)
+            return vals[idx].to(device=L.device), vecs[:, idx].to(device=L.device)
         vals, vecs = torch.linalg.eigh(L)
         # Sort ascending
         idx = torch.argsort(vals)
