@@ -153,6 +153,29 @@ class BenchmarkRunner:
             dense = torch.eye(4, device=device)
             sparse = dense.to_sparse_coo()
             _ = sparse.to_dense() @ dense
+            row_index = torch.arange(600, device=device) % 300
+            col_index = torch.arange(600, device=device)
+            sparse_boundary = torch.sparse_coo_tensor(
+                torch.stack((row_index, col_index)),
+                torch.ones(600, device=device),
+                size=(300, 600),
+                device=device,
+            ).coalesce()
+            boundary_indices = sparse_boundary.indices()
+            boundary_values = sparse_boundary.values()
+            boundary_mask = (boundary_indices[0] < 300) & (boundary_indices[1] < 525)
+            sparse_submatrix = torch.sparse_coo_tensor(
+                boundary_indices[:, boundary_mask],
+                boundary_values[boundary_mask],
+                size=(300, 525),
+                device=device,
+            ).coalesce()
+            sparse_dense = sparse_submatrix.to_dense()
+            _ = sparse_dense @ sparse_dense.T
+            singular = torch.eye(256, device=device)
+            singular[-1] = 0
+            singular[:, -1] = 0
+            _ = torch.linalg.pinv(singular, hermitian=True) @ torch.ones(256, 16, device=device)
             _ = torch.linalg.eigvalsh(dense)
             _ = torch.linalg.eigvalsh(torch.eye(300))
             scatter_target = torch.zeros(512, 512, device=device)
@@ -179,7 +202,9 @@ class BenchmarkRunner:
 
     def _solve_eigs_from_matrix(self, complex_obj, matrix):
         """Time only the eigensolver for an already-built Laplacian matrix."""
-        return complex_obj._solve_eigs(matrix)
+        if hasattr(complex_obj, "_solve_eigs"):
+            return complex_obj._solve_eigs(matrix)
+        return complex_obj.eigs_Algorithm(matrix)
 
     def _estimate_matrix_rows(self, complex_obj, dim: int, a: float) -> Optional[int]:
         if not hasattr(complex_obj, "filtered_boundaries"):
@@ -384,17 +409,12 @@ class BenchmarkRunner:
                 if rows == 0:
                     eigs = []
                     t_eigs = 0.0
-                elif package == "petls-pytorch":
+                else:
                     self._synchronize(package)
                     t0 = time.perf_counter()
                     eigs = self._solve_eigs_from_matrix(complex_obj, L)
                     self._synchronize(package)
                     t_eigs = (time.perf_counter() - t0) * 1000
-                else:
-                    t0 = time.perf_counter()
-                    eigs = complex_obj.spectra(dim, a, b)
-                    t_spectra = (time.perf_counter() - t0) * 1000
-                    t_eigs = max(0.0, t_spectra - t_build)
             except Exception as e:
                 self._print(f"    ERROR eigs(dim={dim}, a={a:.4f}, b={b:.4f}): {e}")
                 continue

@@ -9,6 +9,9 @@
   regions, empty eigensolves report `0.0 ms`, and PETLS-PyTorch eigensolve
   timing now solves the already-built Laplacian instead of rebuilding it via
   `spectra()`.
+- PETLS benchmark eigensolve timing now also calls the configured eigensolver
+  on the already-built `get_L()` matrix, replacing the previous
+  `spectra() - get_L()` estimate.
 - Switched Gudhi simplex-tree boundary extraction to sparse COO matrices and
   reused the shared extractor for Alpha complexes.
 - Added a small-matrix CUDA eigensolver fallback that solves matrices up to
@@ -16,19 +19,25 @@
   launch overhead on small benchmark rows.
 - Warmed representative benchmark eigensolve and scatter paths outside timed
   regions so first-use PyTorch backend setup is not charged to the first trial.
+- Warmed representative sparse-boundary and Hermitian pseudoinverse backend
+  paths outside timed regions.
 
 ### Performance
 
+- Switched the Schur-complement singular fallback to
+  `torch.linalg.pinv(..., hermitian=True)`, preserving the symmetric
+  pseudoinverse result while reducing fallback cost.
 - Checkpoint CPU standard preset on Windows:
-  - PETLS baseline: `4.07 s` trial time, `0.63 s` complex builds.
-  - PETLS-PyTorch: `1.54 s` trial time, `0.57 s` complex builds.
+  - PETLS direct-eigensolve baseline: `9.65 s` trial time, `0.61 s` complex
+    builds.
+  - PETLS-PyTorch: `1.60 s` trial time, `0.56 s` complex builds.
 - Checkpoint CUDA standard preset on Windows:
-  - PETLS-PyTorch CUDA: `0.83 s` trial time, `0.68 s` complex builds.
+  - PETLS-PyTorch CUDA: `0.75 s` trial time, `0.74 s` complex builds.
   - Remaining row-wise misses against PETLS baseline:
-    - CPU: `42` total-time misses and `33` eigensolve-time misses out of `75`
-      completed rows.
-    - CUDA: `49` total-time misses and `40` eigensolve-time misses out of `75`
-      completed rows.
+    - CPU: `12` total-time misses and no non-empty eigensolve-time misses out
+      of `75` completed rows.
+    - CUDA: `20` total-time misses and `3` non-empty eigensolve-time misses out
+      of `75` completed rows.
     - The aggregate trial time target is met, but the all-rows stopping
       condition is still open.
 

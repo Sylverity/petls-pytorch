@@ -185,7 +185,7 @@ def get_up(
         L_chol = torch.linalg.cholesky(D)
         X = torch.cholesky_solve(C, L_chol)
     except RuntimeError:
-        X = torch.linalg.pinv(D) @ C
+        X = torch.linalg.pinv(D, hermitian=True) @ C
 
     L_up = A - B_block @ X
     L_up = _symmetrize_lower(L_up)
