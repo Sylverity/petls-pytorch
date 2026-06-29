@@ -52,7 +52,6 @@ PRESETS = {
                 "max_dim": 2,
                 "num_filtrations": 6,
                 "include_final_request": False,
-                "max_matrix_rows": 1800,
             },
             {
                 "dataset_name": "sphere",
@@ -61,7 +60,6 @@ PRESETS = {
                 "max_dim": 2,
                 "num_filtrations": 6,
                 "include_final_request": False,
-                "max_matrix_rows": 1800,
             },
             {
                 "dataset_name": "swiss_roll",
@@ -70,7 +68,6 @@ PRESETS = {
                 "max_dim": 2,
                 "num_filtrations": 6,
                 "include_final_request": False,
-                "max_matrix_rows": 1800,
             },
             {
                 "dataset_name": "klein_bottle",
@@ -79,7 +76,6 @@ PRESETS = {
                 "max_dim": 2,
                 "num_filtrations": 6,
                 "include_final_request": False,
-                "max_matrix_rows": 1800,
             },
             {
                 "dataset_name": "torus",
@@ -88,7 +84,6 @@ PRESETS = {
                 "max_dim": 2,
                 "num_filtrations": 6,
                 "rips_threshold_quantile": 0.12,
-                "max_matrix_rows": 1800,
             },
         ],
     },

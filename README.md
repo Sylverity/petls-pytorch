@@ -131,8 +131,9 @@ CSV, JSON, and plot outputs under `benchmark-results/` by default.
 
 The `standard` preset is the main comparison workload. It exercises Alpha
 complexes on torus, sphere, swiss roll, and Klein bottle point clouds, plus a
-bounded Rips-complex case. It samples dimensions 0, 1, and 2 and caps dense
-matrix eigensolves at 1800 rows.
+bounded Rips-complex case. It samples dimensions 0, 1, and 2 and completes all
+standard rows by default, including empty Laplacians and the largest sampled
+Alpha matrices. Use `--max_matrix_rows` only for custom capped runs.
 
 Final benchmark on our Windows 11 Pro machine:
 
@@ -143,14 +144,16 @@ Final benchmark on our Windows 11 Pro machine:
 
 | Package | Device | Completed | Skipped | Trial Time | Mean Trial | Mean Eigs | Complex Builds | Max Completed Matrix |
 |---------|--------|----------:|--------:|-----------:|-----------:|----------:|---------------:|---------------------:|
-| `petls` | CPU | 75 | 3 | 3.69 s | 47.3 ms | 41.9 ms | 1.25 s | 1649 x 1649 |
-| `petls-pytorch` | CPU | 75 | 3 | 2.57 s | 33.0 ms | 24.1 ms | 3.14 s | 1649 x 1649 |
-| `petls-pytorch` | CUDA | 75 | 3 | 1.39 s | 17.8 ms | 11.0 ms | 3.01 s | 1649 x 1649 |
+| `petls` | CPU | 78 | 0 | 8.05 s | 103.2 ms | 97.7 ms | 0.52 s | 2399 x 2399 |
+| `petls-pytorch` | CPU | 78 | 0 | 2.20 s | 28.2 ms | 24.2 ms | 0.57 s | 2399 x 2399 |
+| `petls-pytorch` | CUDA | 78 | 0 | 1.05 s | 13.4 ms | 9.7 ms | 0.66 s | 2399 x 2399 |
 
-On this workload, `petls-pytorch` CPU is `1.43x` faster by trial time and
-`1.74x` faster on eigensolves than native PETLS. On the RTX 4070 Ti,
-`petls-pytorch` CUDA is `2.66x` faster by trial time and `3.82x` faster on
-eigensolves.
+On this workload, `petls-pytorch` CPU is `3.65x` faster by trial time and
+`4.03x` faster on eigensolves than native PETLS. On the RTX 4070 Ti,
+`petls-pytorch` CUDA is `7.70x` faster by trial time and `10.04x` faster on
+eigensolves. A few tiny rows are still slower row-by-row because fixed overhead
+dominates, but the standard CPU and CUDA aggregate comparisons are both clear
+wins with no skipped benchmark rows.
 
 ## Running Benchmarks
 

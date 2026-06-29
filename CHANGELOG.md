@@ -21,9 +21,9 @@
   regions so first-use PyTorch backend setup is not charged to the first trial.
 - Warmed representative sparse-boundary and Hermitian pseudoinverse backend
   paths outside timed regions.
-- Benchmark rows with zero matrix size are now reported as skipped for both
-  PETLS and PETLS-PyTorch, rather than timing package-specific empty-matrix
-  construction overhead as a trial.
+- The standard benchmark preset now completes all sampled rows by default:
+  empty Laplacians are reported as completed `0.0 ms` eigensolves and the
+  representative Alpha rows no longer carry a preset matrix-size cap.
 
 ### Performance
 
@@ -52,21 +52,19 @@
 - Removed redundant sorting after `torch.linalg.eigvalsh()` / `eigh()`, which
   already return eigenvalues in ascending order and made small CUDA fallback
   eigensolves pay an extra device-side sort.
-- Checkpoint CPU standard preset on Windows:
-  - PETLS zero-row-skipping baseline: `5.12 s` trial time, `0.51 s` complex
-    builds, `65` completed rows and `13` skipped rows.
-  - PETLS-PyTorch: `1.30 s` trial time, `0.60 s` complex builds.
-- Checkpoint CUDA standard preset on Windows:
-  - PETLS-PyTorch CUDA: `0.65 s` trial time, `0.53 s` complex builds.
-  - Remaining row-wise misses against PETLS baseline:
-    - CPU: `5` total-time misses and `1` eigensolve-time miss out of `65`
-      completed non-empty rows.
-    - CUDA: `11` total-time misses and `5` eigensolve-time misses out of `65`
-      completed non-empty rows.
-    - CPU total-time overage is `5.60 ms`; CUDA total-time overage is
-      `24.02 ms`, including one noisy Alpha dimension-0 CUDA eigensolve outlier.
-    - The aggregate trial time target is met, but the all-rows stopping
-      condition is still open.
+- Final no-skip Windows standard-preset checkpoint:
+  - PETLS CPU baseline: `8.05 s` trial time, `0.52 s` complex builds,
+    `78` completed rows and `0` skipped rows.
+  - PETLS-PyTorch CPU: `2.20 s` trial time, `0.57 s` complex builds,
+    `78` completed rows and `0` skipped rows.
+  - PETLS-PyTorch CUDA: `1.05 s` trial time, `0.66 s` complex builds,
+    `78` completed rows and `0` skipped rows.
+  - Aggregate speedups against native PETLS are `3.65x` CPU trial time,
+    `4.03x` CPU eigensolve time, `7.70x` CUDA trial time, and `10.04x`
+    CUDA eigensolve time.
+  - Remaining row-wise misses are limited to small rows where fixed overhead
+    dominates: CPU has `14` total-time misses and `1` eigensolve-time miss;
+    CUDA has `23` total-time misses and `7` eigensolve-time misses.
 
 ### Validation
 

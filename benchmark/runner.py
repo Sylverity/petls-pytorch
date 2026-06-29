@@ -331,35 +331,6 @@ class BenchmarkRunner:
         row_cap = max_matrix_rows if max_matrix_rows is not None else self.max_matrix_rows
         for request_index, (dim, a, b) in enumerate(requests, start=1):
             rows_estimate = self._estimate_matrix_rows(complex_obj, dim, a)
-            if rows_estimate == 0:
-                result = BenchmarkResult(
-                    package=package,
-                    dataset=dataset_name,
-                    n_points=n_points,
-                    complex_type=complex_type,
-                    max_dim=max_dim,
-                    dim=dim,
-                    filtration_a=round(a, 6),
-                    filtration_b=round(b, 6),
-                    matrix_rows=0,
-                    algorithm=self.algorithm,
-                    device=self.device,
-                    seed=seed,
-                    config_index=config_index,
-                    request_index=request_index,
-                    complex_build_time_ms=t_build_complex,
-                    skipped=True,
-                    skip_reason="matrix_rows=0",
-                )
-                results.append(result)
-                if on_result is not None:
-                    on_result(result)
-                self._print(
-                    f"  [{request_index:02d}/{len(requests):02d}] dim={dim} "
-                    f"a={a:.4f} b={b:.4f} | size~{rows_estimate:5d} | SKIP {result.skip_reason}"
-                )
-                continue
-
             if row_cap is not None and rows_estimate is not None and rows_estimate > row_cap:
                 result = BenchmarkResult(
                     package=package,
@@ -401,35 +372,6 @@ class BenchmarkRunner:
             t_build = (time.perf_counter() - t0) * 1000
 
             rows = int(L.shape[0])
-            if rows == 0:
-                result = BenchmarkResult(
-                    package=package,
-                    dataset=dataset_name,
-                    n_points=n_points,
-                    complex_type=complex_type,
-                    max_dim=max_dim,
-                    dim=dim,
-                    filtration_a=round(a, 6),
-                    filtration_b=round(b, 6),
-                    matrix_rows=0,
-                    algorithm=self.algorithm,
-                    device=self.device,
-                    seed=seed,
-                    config_index=config_index,
-                    request_index=request_index,
-                    complex_build_time_ms=t_build_complex,
-                    skipped=True,
-                    skip_reason="matrix_rows=0",
-                )
-                results.append(result)
-                if on_result is not None:
-                    on_result(result)
-                self._print(
-                    f"  [{request_index:02d}/{len(requests):02d}] dim={dim} "
-                    f"a={a:.4f} b={b:.4f} | size={rows:5d} | SKIP {result.skip_reason}"
-                )
-                continue
-
             if row_cap is not None and rows > row_cap:
                 result = BenchmarkResult(
                     package=package,
