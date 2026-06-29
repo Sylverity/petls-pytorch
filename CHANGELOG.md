@@ -27,16 +27,19 @@
 - Switched the Schur-complement singular fallback to
   `torch.linalg.pinv(..., hermitian=True)`, preserving the symmetric
   pseudoinverse result while reducing fallback cost.
+- Use dense Gram multiplication for small sparse boundary blocks
+  (`rows * cols <= 150000`), avoiding sparse-kernel overhead on the remaining
+  small Rips benchmark rows while preserving the sparse path for larger blocks.
 - Checkpoint CPU standard preset on Windows:
   - PETLS direct-eigensolve baseline: `9.65 s` trial time, `0.61 s` complex
     builds.
-  - PETLS-PyTorch: `1.60 s` trial time, `0.56 s` complex builds.
+  - PETLS-PyTorch: `1.58 s` trial time, `0.58 s` complex builds.
 - Checkpoint CUDA standard preset on Windows:
-  - PETLS-PyTorch CUDA: `0.75 s` trial time, `0.74 s` complex builds.
+  - PETLS-PyTorch CUDA: `0.73 s` trial time, `0.64 s` complex builds.
   - Remaining row-wise misses against PETLS baseline:
-    - CPU: `12` total-time misses and no non-empty eigensolve-time misses out
+    - CPU: `13` total-time misses and no non-empty eigensolve-time misses out
       of `75` completed rows.
-    - CUDA: `20` total-time misses and `3` non-empty eigensolve-time misses out
+    - CUDA: `21` total-time misses and `4` non-empty eigensolve-time misses out
       of `75` completed rows.
     - The aggregate trial time target is met, but the all-rows stopping
       condition is still open.

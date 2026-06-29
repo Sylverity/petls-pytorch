@@ -33,7 +33,7 @@ def _symmetrize_lower(L: torch.Tensor) -> torch.Tensor:
 def _sparse_gram(B: torch.Tensor, transpose_left: bool, dtype: torch.dtype) -> torch.Tensor:
     """Compute a sparse boundary Gram matrix and return a dense tensor."""
     B = B.to(dtype=dtype)
-    if B.device.type != "cpu":
+    if B.device.type != "cpu" or B.shape[0] * B.shape[1] <= 150_000:
         B_dense = B.to_dense()
         if transpose_left:
             return B_dense.T @ B_dense
