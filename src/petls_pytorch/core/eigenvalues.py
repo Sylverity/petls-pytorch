@@ -30,11 +30,9 @@ def _register_defaults() -> None:
         if L.shape[0] == 1:
             return L.diagonal().real
         if L.device.type == "cuda" and L.shape[0] <= _CUDA_CPU_FALLBACK_ROWS:
-            vals = torch.linalg.eigvalsh(L.cpu()).to(device=L.device)
-            return torch.sort(vals).values
-        # torch.linalg.eigvalsh is fast on GPU for dense symmetric matrices
-        vals = torch.linalg.eigvalsh(L)
-        return torch.sort(vals).values
+            return torch.linalg.eigvalsh(L.cpu()).to(device=L.device)
+        # torch.linalg.eigvalsh returns eigenvalues in ascending order.
+        return torch.linalg.eigvalsh(L)
 
     def eigh_pairs(L: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Return (eigenvalues, eigenvectors) like scipy.linalg.eigh."""
@@ -47,12 +45,9 @@ def _register_defaults() -> None:
             return val, vec
         if L.device.type == "cuda" and L.shape[0] <= _CUDA_CPU_FALLBACK_ROWS:
             vals, vecs = torch.linalg.eigh(L.cpu())
-            idx = torch.argsort(vals)
-            return vals[idx].to(device=L.device), vecs[:, idx].to(device=L.device)
+            return vals.to(device=L.device), vecs.to(device=L.device)
         vals, vecs = torch.linalg.eigh(L)
-        # Sort ascending
-        idx = torch.argsort(vals)
-        return vals[idx], vecs[:, idx]
+        return vals, vecs
 
     SOLVERS["eigvalsh"] = eigh_full
     SOLVERS["eigh"] = eigh_pairs

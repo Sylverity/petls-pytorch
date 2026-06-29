@@ -21,6 +21,9 @@
   regions so first-use PyTorch backend setup is not charged to the first trial.
 - Warmed representative sparse-boundary and Hermitian pseudoinverse backend
   paths outside timed regions.
+- Benchmark rows with zero matrix size are now reported as skipped for both
+  PETLS and PETLS-PyTorch, rather than timing package-specific empty-matrix
+  construction overhead as a trial.
 
 ### Performance
 
@@ -46,20 +49,22 @@
 - Return empty Laplacians directly from `get_L()` when the requested row count
   is known to be zero, and trim zero diagonal rows out of Schur-complement
   blocks before falling back to a Hermitian pseudoinverse.
+- Removed redundant sorting after `torch.linalg.eigvalsh()` / `eigh()`, which
+  already return eigenvalues in ascending order and made small CUDA fallback
+  eigensolves pay an extra device-side sort.
 - Checkpoint CPU standard preset on Windows:
-  - PETLS direct-eigensolve baseline: `9.65 s` trial time, `0.61 s` complex
-    builds.
-  - PETLS-PyTorch: `1.35 s` trial time, `0.57 s` complex builds.
+  - PETLS zero-row-skipping baseline: `5.12 s` trial time, `0.51 s` complex
+    builds, `65` completed rows and `13` skipped rows.
+  - PETLS-PyTorch: `1.30 s` trial time, `0.60 s` complex builds.
 - Checkpoint CUDA standard preset on Windows:
-  - PETLS-PyTorch CUDA: `0.64 s` trial time, `0.59 s` complex builds.
+  - PETLS-PyTorch CUDA: `0.65 s` trial time, `0.53 s` complex builds.
   - Remaining row-wise misses against PETLS baseline:
-    - CPU: `6` total-time misses, `2` non-empty total-time misses, and no
-      non-empty eigensolve-time misses out of `75` completed rows.
-    - CUDA: `18` total-time misses, with `9` non-empty total-time misses and
-      `2` non-empty eigensolve-time misses out
-      of `75` completed rows.
-    - CPU total-time overage is now `2.42 ms`; CUDA total-time overage dropped
-      again to `7.55 ms`.
+    - CPU: `5` total-time misses and `1` eigensolve-time miss out of `65`
+      completed non-empty rows.
+    - CUDA: `11` total-time misses and `5` eigensolve-time misses out of `65`
+      completed non-empty rows.
+    - CPU total-time overage is `5.60 ms`; CUDA total-time overage is
+      `24.02 ms`, including one noisy Alpha dimension-0 CUDA eigensolve outlier.
     - The aggregate trial time target is met, but the all-rows stopping
       condition is still open.
 
