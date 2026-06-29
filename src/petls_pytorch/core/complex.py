@@ -14,7 +14,7 @@ from typing import Callable, List, Optional, Tuple
 import numpy as np
 import torch
 
-from petls_pytorch._config import get_device, get_dtype
+from petls_pytorch._config import get_device, get_dtype, get_sparse_dtype
 from petls_pytorch.core.filtered_boundary import FilteredBoundaryMatrix
 from petls_pytorch.core.profile import Profile
 
@@ -167,7 +167,7 @@ class Complex:
 
         if isinstance(x, torch.Tensor):
             if x.is_sparse:
-                return x
+                return x.coalesce() if x.layout == torch.sparse_coo else x
             # Dense tensor -> COO
             return x.to_sparse_coo()
         if isinstance(x, np.ndarray):
@@ -180,8 +180,8 @@ class Complex:
                     torch.from_numpy(coo.col).long(),
                 ]
             )
-            values = torch.from_numpy(coo.data)
-            return torch.sparse_coo_tensor(indices, values, size=coo.shape)
+            values = torch.from_numpy(coo.data).to(dtype=get_sparse_dtype())
+            return torch.sparse_coo_tensor(indices, values, size=coo.shape).coalesce()
         raise TypeError(f"Cannot convert type {type(x)} to sparse tensor")
 
     def set_eigs_algorithm(

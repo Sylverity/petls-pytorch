@@ -1,5 +1,5 @@
 """
-Gudhi simplex tree → dense boundary extraction.
+Gudhi simplex tree -> sparse boundary extraction.
 
 Shared by Alpha and Rips variants.
 """
@@ -7,13 +7,14 @@ Shared by Alpha and Rips variants.
 from __future__ import annotations
 
 import numpy as np
+from scipy.sparse import coo_matrix
 
 
 def simplex_tree_boundaries_filtrations(
     simplex_tree,
     sign_convention: str = "python",
-) -> tuple[list[np.ndarray], list[list[float]]]:
-    """Extract dense boundary matrices and per-dimension filtrations from a Gudhi simplex tree.
+) -> tuple[list[coo_matrix], list[list[float]]]:
+    """Extract sparse boundary matrices and per-dimension filtrations from a Gudhi simplex tree.
 
     Parameters
     ----------
@@ -27,7 +28,7 @@ def simplex_tree_boundaries_filtrations(
 
     Returns
     -------
-    boundaries : list[np.ndarray]
+    boundaries : list[scipy.sparse.coo_matrix]
         ``boundaries[d]`` is the boundary matrix :math:`d_{d+1}` with shape
         ``(n_d, n_{d+1})``.
     filtrations : list[list[float]]
@@ -86,8 +87,7 @@ def simplex_tree_boundaries_filtrations(
 
         n_rows = len(index_mappings[dim - 1])
         n_cols = len(index_mappings[dim])
-        B = np.zeros((n_rows, n_cols), dtype=np.float64)
-        B[rows, cols] = data
+        B = coo_matrix((data, (rows, cols)), shape=(n_rows, n_cols), dtype=np.float32)
         boundaries.append(B)
 
     return boundaries, filtrations

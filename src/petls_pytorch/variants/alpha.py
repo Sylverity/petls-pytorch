@@ -8,10 +8,10 @@ all persistent-Laplacian computations to :class:`petls_pytorch.core.complex.Comp
 
 from __future__ import annotations
 
-import numpy as np
 import torch
 
 from petls_pytorch.core.complex import Complex
+from petls_pytorch.utils.simplex_tree import simplex_tree_boundaries_filtrations
 
 
 def _read_off_file(path: str) -> list[list[float]]:
@@ -42,79 +42,6 @@ def _read_off_file(path: str) -> list[list[float]]:
         coords = list(map(float, lines[idx + i].split()))
         points.append(coords[:3])  # only first 3 coordinates
     return points
-
-
-def _simplex_tree_boundaries_filtrations(simplex_tree):
-    """Extract dense boundary matrices and per-dimension filtrations from a Gudhi simplex tree.
-
-    This is a PyTorch-native reimplementation of the logic in
-    ``petls.PLutil.simplex_tree_boundaries_filtrations``.
-
-    Returns
-    -------
-    boundaries : list[np.ndarray]
-        ``boundaries[d]`` is the boundary matrix :math:`d_{d+1}` with shape
-        ``(n_d, n_{d+1})``.
-    filtrations : list[list[float]]
-        ``filtrations[d]`` contains the filtration values for dimension *d*.
-    """
-    # 1. Assign a unique global index to every simplex (in filtration order).
-    indices = {}
-    for simplex, filtration in simplex_tree.get_filtration():
-        indices[tuple(simplex)] = len(indices)
-
-    max_dim = simplex_tree.dimension()
-
-    # 2. Collect boundary triples [global_face_idx, global_simplex_idx, coeff]
-    #    and filtrations per dimension.
-    boundaries_triples = [[] for _ in range(max_dim + 1)]
-    filtrations = [[] for _ in range(max_dim + 1)]
-
-    for simplex, filtration in simplex_tree.get_filtration():
-        dim = len(simplex) - 1
-        filtrations[dim].append(filtration)
-
-        if dim == 0:
-            continue
-
-        # Match C++ sign convention: sign = 1 - 2*(dim % 2), alternating.
-        sign = 1 - 2 * (dim % 2)
-        for face, _ in simplex_tree.get_boundaries(simplex):
-            boundaries_triples[dim].append([indices[tuple(face)], indices[tuple(simplex)], sign])
-            sign = -sign
-
-    # 3. Re-index to dimension-local indices [0 .. N_dim-1].
-    index_mappings = [{} for _ in range(max_dim + 1)]
-
-    for dim in range(max_dim):
-        face_set = set(triple[0] for triple in boundaries_triples[dim + 1])
-        simplex_set = set(triple[1] for triple in boundaries_triples[dim])
-        actual = list(face_set | simplex_set)
-        for i, idx in enumerate(actual):
-            index_mappings[dim][idx] = i
-
-    top_set = set(triple[1] for triple in boundaries_triples[max_dim])
-    for i, idx in enumerate(list(top_set)):
-        index_mappings[max_dim][idx] = i
-
-    # 4. Build dense numpy boundary matrices.
-    boundaries = []
-    for dim in range(1, max_dim + 1):
-        rows = []
-        cols = []
-        data = []
-        for triple in boundaries_triples[dim]:
-            rows.append(index_mappings[dim - 1][triple[0]])
-            cols.append(index_mappings[dim][triple[1]])
-            data.append(triple[2])
-
-        n_rows = len(index_mappings[dim - 1])
-        n_cols = len(index_mappings[dim])
-        B = np.zeros((n_rows, n_cols), dtype=np.float64)
-        B[rows, cols] = data
-        boundaries.append(B)
-
-    return boundaries, filtrations
 
 
 class Alpha(Complex):
@@ -168,6 +95,8 @@ class Alpha(Complex):
         if max_dim is not None and simplex_tree.dimension() > max_dim:
             simplex_tree.prune_above_dimension(max_dim)
 
-        boundaries, filtrations = _simplex_tree_boundaries_filtrations(simplex_tree)
+        boundaries, filtrations = simplex_tree_boundaries_filtrations(
+            simplex_tree, sign_convention="cpp"
+        )
 
         super().__init__(boundaries=boundaries, filtrations=filtrations, device=device)

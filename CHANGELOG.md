@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Made benchmark timing more explicit and fair: package import/device warmup is
+  excluded from complex-build timing, CUDA runs synchronize around timed
+  regions, empty eigensolves report `0.0 ms`, and PETLS-PyTorch eigensolve
+  timing now solves the already-built Laplacian instead of rebuilding it via
+  `spectra()`.
+- Switched Gudhi simplex-tree boundary extraction to sparse COO matrices and
+  reused the shared extractor for Alpha complexes.
+
+### Performance
+
+- Checkpoint CPU standard preset on Windows:
+  - PETLS baseline: `4.07 s` trial time, `0.63 s` complex builds.
+  - PETLS-PyTorch: `1.84 s` trial time, `0.59 s` complex builds.
+- Checkpoint CUDA standard preset on Windows:
+  - PETLS-PyTorch CUDA: `1.12 s` trial time, `0.44 s` complex builds.
+  - Remaining misses: PETLS-PyTorch still loses some small/empty per-row
+    trial/eigensolve timings, especially CUDA small-matrix rows, and the CPU
+    Rips complex-build config (`229 ms` vs PETLS `142 ms`).
+
+### Validation
+
+- `ruff check .` passes.
+- `pytest tests -k "not test_get_down_eigenvalues_match_reference and not
+  test_get_down_eigenvalues_match_mwe"` passes: `107 passed, 3 deselected`.
+  The deselected tests are the known Windows PETLS `get_down()` access
+  violation cases. `pytest --with petls` is not currently a registered option
+  in this repo.
+
 ## 1.0.2 - 2026-06-28
 
 ### Changed

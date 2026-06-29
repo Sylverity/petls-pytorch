@@ -49,6 +49,10 @@ class FilteredBoundaryMatrix:
 
         self.num_rows = self.range_filtrations.shape[0]
         self.num_cols = self.domain_filtrations.shape[0]
+        self._coalesced_matrix = (
+            self.matrix.coalesce() if self.matrix.layout == torch.sparse_coo else self.matrix
+        )
+        self._submatrix_cache: dict[tuple[float, bool], torch.Tensor] = {}
 
         # Ensure sorted filtrations (required for index_of_filtration correctness)
         if not torch.all(self.domain_filtrations[:-1] <= self.domain_filtrations[1:]):
@@ -81,22 +85,30 @@ class FilteredBoundaryMatrix:
 
         Returns a sparse COO tensor on the same device.
         """
+        cache_key = (float(a), return_coo)
+        cached = self._submatrix_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         col_idx = self.index_of_filtration(use_domain=True, a=a)
         row_idx = self.index_of_filtration(use_domain=False, a=a)
 
         if col_idx < 0 or row_idx < 0:
             # Empty submatrix
-            return torch.sparse_coo_tensor(
+            empty = torch.sparse_coo_tensor(
                 indices=torch.empty((2, 0), dtype=torch.long, device=self.device),
                 values=torch.empty(0, dtype=self.matrix.dtype, device=self.device),
                 size=(max(0, row_idx + 1), max(0, col_idx + 1)),
             )
+            result = empty if return_coo else empty.to_sparse_csr()
+            self._submatrix_cache[cache_key] = result
+            return result
 
         n_rows = row_idx + 1
         n_cols = col_idx + 1
 
         # Convert to COO for easy filtering
-        coo = self.matrix.coalesce()
+        coo = self._coalesced_matrix
         indices = coo.indices()  # shape (2, nnz)
         values = coo.values()
 
@@ -118,7 +130,9 @@ class FilteredBoundaryMatrix:
         if not return_coo:
             submatrix = submatrix.to_sparse_csr()
 
-        return submatrix.coalesce()
+        result = submatrix.coalesce() if return_coo else submatrix
+        self._submatrix_cache[cache_key] = result
+        return result
 
     def transpose(self) -> FilteredBoundaryMatrix:
         """Return the transposed boundary matrix with swapped filtrations."""

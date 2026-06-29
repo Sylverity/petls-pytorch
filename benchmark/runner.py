@@ -141,6 +141,36 @@ class BenchmarkRunner:
         if self.verbose:
             print(message, flush=True)
 
+    def _prepare_backend(self, package: str) -> None:
+        """Import and configure package code outside timed benchmark regions."""
+        if package == "petls-pytorch":
+            import petls_pytorch
+            import torch
+
+            petls_pytorch.set_device(self.device)
+            device = torch.device(self.device)
+            dense = torch.eye(4, device=device)
+            sparse = dense.to_sparse_coo()
+            _ = sparse.to_dense() @ dense
+            _ = torch.linalg.eigvalsh(dense)
+            if self.device.startswith("cuda"):
+                if torch.cuda.is_available():
+                    torch.empty(1, device=self.device)
+                    torch.cuda.synchronize()
+        elif package == "petls":
+            import petls  # noqa: F401
+
+    def _synchronize(self, package: str) -> None:
+        if package == "petls-pytorch" and self.device.startswith("cuda"):
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+
+    def _solve_eigs_from_matrix(self, complex_obj, matrix):
+        """Time only the eigensolver for an already-built Laplacian matrix."""
+        return complex_obj._solve_eigs(matrix)
+
     def _estimate_matrix_rows(self, complex_obj, dim: int, a: float) -> Optional[int]:
         if not hasattr(complex_obj, "filtered_boundaries"):
             return None
@@ -210,6 +240,7 @@ class BenchmarkRunner:
         from .datasets import generate_dataset
 
         package = (self.package if package is None else package).lower()
+        self._prepare_backend(package)
 
         self._print(
             f"\n[Benchmark] #{config_index} {dataset_name} | n={n_points} | {complex_type} | "
@@ -295,12 +326,14 @@ class BenchmarkRunner:
                 continue
 
             # Matrix construction time
+            self._synchronize(package)
             t0 = time.perf_counter()
             try:
                 L = complex_obj.get_L(dim, a, b)
             except Exception as e:
                 self._print(f"    ERROR get_L(dim={dim}, a={a:.4f}, b={b:.4f}): {e}")
                 continue
+            self._synchronize(package)
             t_build = (time.perf_counter() - t0) * 1000
 
             rows = int(L.shape[0])
@@ -337,13 +370,24 @@ class BenchmarkRunner:
                 continue
 
             # Eigenvalue time
-            t0 = time.perf_counter()
             try:
-                eigs = complex_obj.spectra(dim, a, b)
+                if rows == 0:
+                    eigs = []
+                    t_eigs = 0.0
+                elif package == "petls-pytorch":
+                    self._synchronize(package)
+                    t0 = time.perf_counter()
+                    eigs = self._solve_eigs_from_matrix(complex_obj, L)
+                    self._synchronize(package)
+                    t_eigs = (time.perf_counter() - t0) * 1000
+                else:
+                    t0 = time.perf_counter()
+                    eigs = complex_obj.spectra(dim, a, b)
+                    t_spectra = (time.perf_counter() - t0) * 1000
+                    t_eigs = max(0.0, t_spectra - t_build)
             except Exception as e:
-                self._print(f"    ERROR spectra(dim={dim}, a={a:.4f}, b={b:.4f}): {e}")
+                self._print(f"    ERROR eigs(dim={dim}, a={a:.4f}, b={b:.4f}): {e}")
                 continue
-            t_eigs = (time.perf_counter() - t0) * 1000
 
             betti, lam = complex_obj.eigenvalues_summarize(eigs)
 
