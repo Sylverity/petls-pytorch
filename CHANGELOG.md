@@ -2,57 +2,13 @@
 
 ## Unreleased
 
-### Changed
+### Highlights
 
-- Made benchmark timing more explicit and fair: package import/device warmup is
-  excluded from complex-build timing, CUDA runs synchronize around timed
-  regions, empty eigensolves report `0.0 ms`, and PETLS-PyTorch eigensolve
-  timing now solves the already-built Laplacian instead of rebuilding it via
-  `spectra()`.
-- PETLS benchmark eigensolve timing now also calls the configured eigensolver
-  on the already-built `get_L()` matrix, replacing the previous
-  `spectra() - get_L()` estimate.
-- Switched Gudhi simplex-tree boundary extraction to sparse COO matrices and
-  reused the shared extractor for Alpha complexes.
-- Added a small-matrix CUDA eigensolver fallback that solves matrices up to
-  `512 x 512` on CPU and transfers eigenvalues back to CUDA, avoiding cuSOLVER
-  launch overhead on small benchmark rows.
-- Warmed representative benchmark eigensolve and scatter paths outside timed
-  regions so first-use PyTorch backend setup is not charged to the first trial.
-- Warmed representative sparse-boundary and Hermitian pseudoinverse backend
-  paths outside timed regions.
-- The standard benchmark preset now completes all sampled rows by default:
-  empty Laplacians are reported as completed `0.0 ms` eigensolves and the
-  representative Alpha rows no longer carry a preset matrix-size cap.
-
-### Performance
-
-- Switched the Schur-complement singular fallback to
-  `torch.linalg.pinv(..., hermitian=True)`, preserving the symmetric
-  pseudoinverse result while reducing fallback cost.
-- Use dense Gram multiplication for small sparse boundary blocks
-  (`rows * cols <= 150000`), avoiding sparse-kernel overhead on the remaining
-  small Rips benchmark rows while preserving the sparse path for larger blocks.
-- Skip the guaranteed-failing CPU Cholesky attempt for small Schur-complement
-  blocks with a non-positive diagonal entry and go directly to the Hermitian
-  pseudoinverse fallback.
-- Assemble CPU two-entry incidence Laplacians through NumPy for small graph
-  boundary matrices, reducing PyTorch scatter overhead on Rips dimension-0
-  rows.
-- Keep CPU mirrors for CUDA boundary matrices and build Laplacians with at most
-  `256` rows on CPU before transferring the dense result back to CUDA, reducing
-  launch overhead on the smallest CUDA Rips rows while preserving CUDA return
-  tensors.
-- Mark filtered COO submatrices as coalesced at construction time instead of
-  running a redundant coalesce pass, avoiding cache-fill overhead for first-use
-  Rips and Alpha Laplacian builds.
-- Return empty Laplacians directly from `get_L()` when the requested row count
-  is known to be zero, and trim zero diagonal rows out of Schur-complement
-  blocks before falling back to a Hermitian pseudoinverse.
-- Removed redundant sorting after `torch.linalg.eigvalsh()` / `eigh()`, which
-  already return eigenvalues in ascending order and made small CUDA fallback
-  eigensolves pay an extra device-side sort.
-- Final no-skip Windows standard-preset checkpoint:
+- Improved PETLS-PyTorch benchmark performance on the Windows standard preset
+  while preserving API compatibility.
+- The standard benchmark now completes every sampled row by default, including
+  empty Laplacians and the largest sampled Alpha matrices.
+- Final no-skip Windows standard-preset results:
   - PETLS CPU baseline: `8.05 s` trial time, `0.52 s` complex builds,
     `78` completed rows and `0` skipped rows.
   - PETLS-PyTorch CPU: `2.20 s` trial time, `0.57 s` complex builds,
@@ -62,9 +18,29 @@
   - Aggregate speedups against native PETLS are `3.65x` CPU trial time,
     `4.03x` CPU eigensolve time, `7.70x` CUDA trial time, and `10.04x`
     CUDA eigensolve time.
-  - Remaining row-wise misses are limited to small rows where fixed overhead
-    dominates: CPU has `14` total-time misses and `1` eigensolve-time miss;
-    CUDA has `23` total-time misses and `7` eigensolve-time misses.
+
+### Changed
+
+- Made benchmark timing fairer and more explicit: package import/device warmup
+  is excluded from complex-build timing, CUDA runs synchronize around timed
+  regions, and PETLS/PETLS-PyTorch eigensolve timing now solves an already-built
+  Laplacian instead of measuring `spectra()` side effects.
+- Empty benchmark Laplacians now complete as `0.0 ms` eigensolves instead of
+  being skipped, and the standard preset no longer applies a matrix-size cap.
+- Switched Gudhi simplex-tree boundary extraction to sparse COO matrices and
+  reused the shared extractor for Alpha complexes.
+
+### Performance
+
+- Reduced small-matrix overhead with CPU-backed CUDA fallbacks, CPU mirrors for
+  small CUDA boundary matrices, NumPy assembly for small graph Laplacians, and
+  dense Gram multiplication for small sparse boundary blocks.
+- Reduced Schur-complement fallback cost by using Hermitian pseudoinverses,
+  skipping guaranteed-failing Cholesky attempts, trimming zero diagonal rows,
+  and returning known-empty Laplacians directly.
+- Avoided redundant work by marking filtered COO submatrices as coalesced,
+  warming representative backend paths outside timed regions, and removing the
+  extra sort after `torch.linalg.eigvalsh()` / `eigh()`.
 
 ### Validation
 
