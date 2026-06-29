@@ -154,12 +154,13 @@ class FilteredBoundaryMatrix:
             size=(n_rows, n_cols),
             dtype=sub_values.dtype,
             device=self.device,
+            is_coalesced=True,
         )
 
         if not return_coo:
             submatrix = submatrix.to_sparse_csr()
 
-        result = submatrix.coalesce() if return_coo else submatrix
+        result = submatrix
         self._submatrix_cache[cache_key] = result
         return result
 

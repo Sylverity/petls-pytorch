@@ -40,22 +40,22 @@
   `256` rows on CPU before transferring the dense result back to CUDA, reducing
   launch overhead on the smallest CUDA Rips rows while preserving CUDA return
   tensors.
+- Mark filtered COO submatrices as coalesced at construction time instead of
+  running a redundant coalesce pass, avoiding cache-fill overhead for first-use
+  Rips and Alpha Laplacian builds.
 - Checkpoint CPU standard preset on Windows:
   - PETLS direct-eigensolve baseline: `9.65 s` trial time, `0.61 s` complex
     builds.
-  - PETLS-PyTorch: `1.46 s` trial time, `0.61 s` complex builds.
+  - PETLS-PyTorch: `1.35 s` trial time, `0.55 s` complex builds.
 - Checkpoint CUDA standard preset on Windows:
-  - PETLS-PyTorch CUDA: `0.72-0.75 s` trial time, `0.63 s` complex builds
-    across two fallback reruns.
+  - PETLS-PyTorch CUDA: `0.67 s` trial time, `0.64 s` complex builds.
   - Remaining row-wise misses against PETLS baseline:
-    - CPU: `13` total-time misses, `4` non-empty total-time misses, and no
+    - CPU: `9` total-time misses, `2` non-empty total-time misses, and no
       non-empty eigensolve-time misses out of `75` completed rows.
-    - CUDA: best fallback rerun reduced total-time misses to `19`, with `9`
-      non-empty total-time misses and `4` non-empty eigensolve-time misses out
+    - CUDA: `19` total-time misses, with `10` non-empty total-time misses and
+      `4` non-empty eigensolve-time misses out
       of `75` completed rows.
-    - CUDA total-time overage dropped from `27.64 ms` before this checkpoint to
-      `17.50 ms` in the best-count rerun and `11.70 ms` in the lowest-overage
-      rerun.
+    - CUDA total-time overage dropped again to `9.56 ms`.
     - The aggregate trial time target is met, but the all-rows stopping
       condition is still open.
 
