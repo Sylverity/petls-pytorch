@@ -181,11 +181,14 @@ def get_up(
     # D is SPD in theory but can be singular when some rows of B_pers are
     # zero. The original C++ uses LDLT which handles semidefinite matrices;
     # we fall back to the pseudoinverse for numerical stability.
-    try:
-        L_chol = torch.linalg.cholesky(D)
-        X = torch.cholesky_solve(C, L_chol)
-    except RuntimeError:
+    if D.device.type == "cpu" and D.shape[0] <= 128 and bool(torch.any(D.diagonal() <= 0)):
         X = torch.linalg.pinv(D, hermitian=True) @ C
+    else:
+        try:
+            L_chol = torch.linalg.cholesky(D)
+            X = torch.cholesky_solve(C, L_chol)
+        except RuntimeError:
+            X = torch.linalg.pinv(D, hermitian=True) @ C
 
     L_up = A - B_block @ X
     L_up = _symmetrize_lower(L_up)
