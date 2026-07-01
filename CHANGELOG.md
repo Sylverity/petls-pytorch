@@ -48,8 +48,8 @@
 - `pytest tests -k "not test_get_down_eigenvalues_match_reference and not
   test_get_down_eigenvalues_match_mwe"` passes: `107 passed, 3 deselected`.
   The deselected tests are the known Windows PETLS `get_down()` access
-  violation cases. `pytest --with petls` is not currently a registered option
-  in this repo.
+  violation cases. The documented `uv run --with petls ... pytest` command uses
+  uv's dependency injection; `--with petls` is not a pytest option.
 
 ## 1.0.2 - 2026-06-28
 

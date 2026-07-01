@@ -230,10 +230,20 @@ uv run --extra dev pytest tests/ -v
 
 By default, tests that compare against the original PETLS package are skipped
 when `petls` is not installed. To run the full parity suite against the
-reference implementation:
+reference implementation, use `uv run --with petls` to add PETLS to the
+temporary run environment:
 
 ```bash
 uv run --extra dev --with petls pytest tests/ -v
+```
+
+On Windows, PETLS `get_down()` reference calls can trigger access violations in
+the original native package for the Rips, Alpha, and dFlag comparison cases. To
+avoid those platform-specific crashes while still running the rest of the suite,
+exclude those reference checks:
+
+```bash
+uv run --extra dev --with petls pytest tests/ -v -k "not test_get_down_eigenvalues_match_reference and not test_get_down_eigenvalues_match_mwe"
 ```
 
 If you are not using `uv`, install the package and test dependencies first:
