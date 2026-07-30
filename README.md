@@ -157,22 +157,23 @@ wins with no skipped benchmark rows.
 
 ## Running Benchmarks
 
-From a source checkout, run the benchmark module with `uv`. Add `--with petls`
+From a source checkout, run the benchmark module with `uv`. The benchmark harness needs the
+`benchmark` extra (it pulls in `tadasets`), so pass `--extra benchmark`. Add `--with petls`
 when benchmarking against the original PETLS package.
 
 ```bash
 # Representative CPU/GPU comparison
-uv run python -m benchmark --preset standard --package petls-pytorch --algorithm eigvalsh --device cpu
-uv run python -m benchmark --preset standard --package petls-pytorch --algorithm eigvalsh --device cuda
+uv run --extra benchmark python -m benchmark --preset standard --package petls-pytorch --algorithm eigvalsh --device cpu
+uv run --extra benchmark python -m benchmark --preset standard --package petls-pytorch --algorithm eigvalsh --device cuda
 
 # Reference PETLS, if installed for your platform
-uv run --with petls python -m benchmark --preset standard --package petls --algorithm selfadjoint
+uv run --extra benchmark --with petls python -m benchmark --preset standard --package petls --algorithm selfadjoint
 
 # Larger GPU stress run
-uv run python -m benchmark --preset stress --package petls-pytorch --algorithm eigvalsh --device cuda
+uv run --extra benchmark python -m benchmark --preset stress --package petls-pytorch --algorithm eigvalsh --device cuda
 
 # Custom single run
-uv run python -m benchmark \
+uv run --extra benchmark python -m benchmark \
     --dataset torus --n_points 2000 --complex alpha --max_dim 3 \
     --package petls-pytorch --algorithm eigvalsh --device cuda \
     --max_matrix_rows 12000
@@ -191,7 +192,7 @@ python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda
 If you are not using `uv`, install from the source checkout first:
 
 ```bash
-python -m pip install -e .
+python -m pip install -e ".[benchmark]"
 python -m pip install petls  # only needed for --package petls
 python -m benchmark --preset standard --package petls-pytorch --algorithm eigvalsh --device cpu
 ```
