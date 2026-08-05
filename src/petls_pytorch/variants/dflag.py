@@ -211,8 +211,7 @@ class dFlag(Complex):
         max_matrix_rows: int | None = 12_000,
         max_matrix_bytes: int | None = 4_000_000_000,
         on_oversize: str = "raise",
-        eigs_Algorithm: str = "eigvalsh",
-        up_Algorithm: str = "schur",
+        eigs_algorithm: str = "eigvalsh",
     ):
         adj = _read_flag_file(filename)
         simplices, filtrations = _enumerate_directed_simplices(adj, max_dim)
@@ -237,8 +236,7 @@ class dFlag(Complex):
             max_matrix_rows=max_matrix_rows,
             max_matrix_bytes=max_matrix_bytes,
             on_oversize=on_oversize,
-            eigs_Algorithm=eigs_Algorithm,
-            up_Algorithm=up_Algorithm,
+            eigs_algorithm=eigs_algorithm,
         )
         self.simplices_by_dimension = simplices[: actual_top_dim + 1]
         self.simplex_to_index = [

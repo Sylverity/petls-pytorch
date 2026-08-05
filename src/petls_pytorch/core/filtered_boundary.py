@@ -15,7 +15,7 @@ from __future__ import annotations
 import torch
 from typing import cast
 
-from petls_pytorch._config import get_device
+from petls_pytorch._config import DEFAULT_DEVICE
 
 
 class FilteredBoundaryMatrix:
@@ -43,7 +43,7 @@ class FilteredBoundaryMatrix:
         if not matrix.is_sparse:
             raise ValueError("matrix must be a sparse tensor (COO or CSR)")
 
-        target_device = torch.device(device) if device is not None else get_device()
+        target_device = torch.device(device) if device is not None else DEFAULT_DEVICE
         cpu_mirror_source = None
         if target_device.type == "cuda":
             cpu_mirror_source = (

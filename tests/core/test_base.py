@@ -42,7 +42,7 @@ def test_construction_matches_reference(ref_small_complex):
 
 
 def test_get_all_filtrations_matches_reference(ref_small_complex):
-    """Vertex births are preserved in addition to legacy PETLS scales."""
+    """Vertex births are preserved in addition to higher-dimensional scales."""
     pl = get_small_complex()
     our_filts = pl.get_all_filtrations()
     ref_filts = ref_small_complex.pl.get_all_filtrations()
@@ -134,7 +134,7 @@ def test_spectra_single_dim_1(ref_small_complex):
 
 
 def test_spectra_all(ref_small_complex):
-    """Legacy successive filtration requests retain numerical parity."""
+    """Successive filtration requests retain numerical parity."""
     pl = get_small_complex()
     ref = ref_small_complex.pl.spectra()
     requests = [(int(item[0]), float(item[1]), float(item[2])) for item in ref]
@@ -150,7 +150,7 @@ def test_spectra_all(ref_small_complex):
 
 
 def test_spectra_allpairs(ref_small_complex):
-    """Legacy all-pairs filtration requests retain numerical parity."""
+    """All-pairs filtration requests retain numerical parity."""
     pl = get_small_complex()
     ref = ref_small_complex.pl.spectra_allpairs()
     requests = [(int(item[0]), float(item[1]), float(item[2])) for item in ref]

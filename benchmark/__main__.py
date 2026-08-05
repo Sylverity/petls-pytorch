@@ -248,7 +248,7 @@ Examples:
         "--algorithm",
         type=str,
         default="eigvalsh",
-        help="Eigenvalue algorithm (eigvalsh, selfadjoint, spectra, etc.)",
+        help="Eigenvalue algorithm (petls-pytorch: eigvalsh or sparse)",
     )
     parser.add_argument(
         "--package",

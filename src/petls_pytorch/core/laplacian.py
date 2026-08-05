@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, cast
 
 import torch
 
-from petls_pytorch._config import get_device, get_dtype
+from petls_pytorch._config import DEFAULT_DEVICE, DEFAULT_DTYPE
 
 if TYPE_CHECKING:
     from petls_pytorch.core.filtered_boundary import FilteredBoundaryMatrix
@@ -100,7 +100,7 @@ def get_down(
         dim-simplices present at filtration a.
     """
     target_device = device if device is not None else fbm.device
-    dtype = dtype if dtype is not None else get_dtype()
+    dtype = dtype if dtype is not None else fbm.matrix.dtype
     col_idx = fbm.index_of_filtration(use_domain=True, a=a)
     if col_idx < 0:
         return torch.empty(0, 0, dtype=dtype, device=target_device)
@@ -165,7 +165,7 @@ def get_up(
     b_col = fbm.index_of_filtration(use_domain=True, a=b)
 
     target_device = device if device is not None else fbm.device
-    dtype = dtype if dtype is not None else get_dtype()
+    dtype = dtype if dtype is not None else fbm.matrix.dtype
 
     # Edge cases (match C++ exactly)
     if a_row == b_row:
@@ -243,8 +243,12 @@ def get_L(
       dim == top_dim → L = L_down only
       dim > top_dim  → empty matrix
     """
-    target_device = device if device is not None else get_device()
-    dtype = dtype if dtype is not None else get_dtype()
+    target_device = device if device is not None else (
+        filtered_boundaries[0].device if filtered_boundaries else DEFAULT_DEVICE
+    )
+    dtype = dtype if dtype is not None else (
+        filtered_boundaries[0].matrix.dtype if filtered_boundaries else DEFAULT_DTYPE
+    )
     l_rows = _laplacian_rows(dim, a, filtered_boundaries, top_dim)
 
     if l_rows == 0:

@@ -40,8 +40,6 @@ class Complex:
         Override global device.
     """
 
-    cpp_algorithms_list = ["selfadjoint", "eigensolver", "bdcsvd", "spectra"]
-
     def __init__(
         self,
         boundaries: Optional[List[Any]] = None,
@@ -49,8 +47,7 @@ class Complex:
         device: torch.device | str | None = None,
         dtype: torch.dtype | str | None = None,
         simplex_tree=None,
-        eigs_Algorithm: str | Callable = "eigvalsh",
-        up_Algorithm: str = "schur",
+        eigs_algorithm: str | Callable = "eigvalsh",
         zero_atol: float = 1e-8,
         zero_rtol: float = 1e-7,
         max_matrix_rows: int | None = 12_000,
@@ -88,7 +85,6 @@ class Complex:
         self._persistence_computed = False
 
         self._eigs_algorithm: str | Callable = "eigvalsh"
-        self._up_algorithm: str = "schur"
         self._num_eigenvalues: int = 10
         self._eigenvalue_order: str = "SM"
 
@@ -120,8 +116,7 @@ class Complex:
             self.filtered_boundaries = []
             self.top_dim = 0
 
-        self.set_eigs_Algorithm(eigs_Algorithm)
-        self.set_up_Algorithm(up_Algorithm)
+        self.set_eigs_algorithm(eigs_algorithm)
 
     @property
     def verbose(self) -> bool:
@@ -232,7 +227,6 @@ class Complex:
         algorithm: str | Callable,
         num_eigenvalues: int = 10,
         eigenvalue_order: str = "SM",
-        **kwargs,
     ) -> None:
         """Set eigenvalue solver.
 
@@ -245,21 +239,17 @@ class Complex:
         eigenvalue_order : str, optional
             Which eigenvalues to target for sparse solvers (default "SM").
         """
+        if not callable(algorithm) and algorithm not in {"eigvalsh", "sparse"}:
+            raise ValueError("algorithm must be 'eigvalsh', 'sparse', or a callable")
+        if num_eigenvalues < 1:
+            raise ValueError("num_eigenvalues must be positive")
+        if eigenvalue_order not in {"SM", "SA", "LM", "LA", "BE"}:
+            raise ValueError(
+                "eigenvalue_order must be one of 'SM', 'SA', 'LM', 'LA', or 'BE'"
+            )
         self._eigs_algorithm = algorithm
         self._num_eigenvalues = num_eigenvalues
         self._eigenvalue_order = eigenvalue_order
-
-    # Alias matching original PETLS camelCase API
-    set_eigs_Algorithm = set_eigs_algorithm
-
-    def set_up_algorithm(self, algorithm: str) -> None:
-        """Set up-Laplacian algorithm. Currently only 'schur' is supported."""
-        if algorithm != "schur":
-            raise ValueError("Only 'schur' up-algorithm is currently supported")
-        self._up_algorithm = algorithm
-
-    # Alias matching original PETLS camelCase API
-    set_up_Algorithm = set_up_algorithm
 
     def _laplacian_rows(self, dim: int, scale: float) -> int:
         if dim < 0:
@@ -472,20 +462,18 @@ class Complex:
 
     def _solve_eigs(self, L: torch.Tensor) -> torch.Tensor:
         """Dispatch to eigenvalue solver."""
-        from petls_pytorch.core.eigenvalues import solve_eigenvalues
-        from petls_pytorch import sparse_wrapper
+        from petls_pytorch.core.eigenvalues import (
+            solve_eigenvalues,
+            solve_sparse_eigenvalues,
+        )
 
         algorithm = self._eigs_algorithm
         if algorithm == "sparse":
-
-            def sparse_algorithm(matrix: torch.Tensor) -> np.ndarray:
-                return sparse_wrapper(
-                    matrix.cpu().numpy(),
-                    num_eigs=self._num_eigenvalues,
-                    which_eigs=self._eigenvalue_order,
-                )
-
-            return torch.asarray(sparse_algorithm(L), dtype=L.dtype, device=L.device)
+            return solve_sparse_eigenvalues(
+                L,
+                num_eigenvalues=self._num_eigenvalues,
+                which=self._eigenvalue_order,
+            )
         return cast(torch.Tensor, solve_eigenvalues(L, algorithm=algorithm))
 
     def _solve_eigenpairs(self, L: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -628,7 +616,7 @@ class Complex:
 
     def eigenpairs(
         self,
-        dim: Optional[int | list[tuple[int, float, float]]] = None,
+        dim: Optional[int] = None,
         a: Optional[float] = None,
         b: Optional[float] = None,
         request_list: Optional[List[Tuple[int, float, float]]] = None,
@@ -642,7 +630,7 @@ class Complex:
         dim, a, b : optional
             Single (dim, a, b) query.
         request_list : list of (dim, a, b), optional
-            Multiple queries. May also be passed as the only positional argument.
+            Multiple queries.
         allpairs : bool
             If True and no other args given, compute all (a_i, a_j) pairs
             with j >= i for all dimensions.
@@ -655,19 +643,8 @@ class Complex:
             If request_list or no args passed: [(dim, a, b, eigenvalues, eigenvectors), ...]
         """
         single_query = dim is not None and a is not None and b is not None
-        if (
-            not single_query
-            and isinstance(dim, list)
-            and a is None
-            and b is None
-            and request_list is None
-        ):
-            request_list = dim
-            dim = None
-
         if dim is not None and a is not None and b is not None:
-            dim_int = cast(int, dim)
-            requests = [(dim_int, a, b)]
+            requests = [(dim, a, b)]
         elif request_list is not None:
             requests = [(int(r[0]), float(r[1]), float(r[2])) for r in request_list]
         else:

@@ -1,76 +1,70 @@
 # Changelog
 
-## Unreleased
+## 1.1.0 - 2026-08-04
 
-### Highlights
+### Added
 
-- Added weighted Gudhi alpha complexes with general power weights, negative
-  vertex births, construction cutoffs, point labels, and retained simplex
-  identities.
-- Added first-class Gudhi-backed topology and persistence summaries plus
-  simplex-mapped harmonic representatives.
-- Added dense-allocation guards and a genuinely sparse ordinary Hodge
-  lowest-spectrum path for larger complexes.
-- Improved PETLS-PyTorch benchmark performance on the Windows standard preset
-  while preserving API compatibility.
-- The standard benchmark now completes every sampled row by default, including
-  empty Laplacians and the largest sampled Alpha matrices.
-- Final no-skip Windows standard-preset results:
-  - PETLS CPU baseline: `8.05 s` trial time, `0.52 s` complex builds,
-    `78` completed rows and `0` skipped rows.
-  - PETLS-PyTorch CPU: `2.20 s` trial time, `0.57 s` complex builds,
-    `78` completed rows and `0` skipped rows.
-  - PETLS-PyTorch CUDA: `1.05 s` trial time, `0.66 s` complex builds,
-    `78` completed rows and `0` skipped rows.
-  - Aggregate speedups against native PETLS are `3.65x` CPU trial time,
-    `4.03x` CPU eigensolve time, `7.70x` CUDA trial time, and `10.04x`
-    CUDA eigensolve time.
+- Added weighted Gudhi alpha complexes with general power weights, finite-value
+  validation, negative vertex births, precision selection, construction
+  cutoffs, and optional point labels.
+- Retained Gudhi simplex trees, per-dimension simplex identities, filtration
+  values, and stable simplex-to-matrix index mappings.
+- Added Gudhi-backed `persistence_intervals()`, `betti_numbers_at()`, and
+  `persistent_betti()` inspection APIs.
+- Added `topology_summary()` for authoritative homology, persistent-Laplacian
+  nullity, spectral gaps, tolerances, matrix sizes, and calculation status.
+- Added simplex-mapped harmonic representatives through `harmonic_features()`.
+- Added `estimate_laplacian()`, configurable dense-allocation guards, and a
+  genuinely sparse ordinary Hodge lowest-spectrum path.
 
 ### Changed
 
-- Filtration enumeration now includes complete zero-dimensional births and can
-  merge nearly equal scales with a configurable tolerance.
-- Device, dtype, and scale-aware eigenvalue zero tolerances are configurable per
-  object. CPU is now the safe default; CUDA auto-selection is opt-in.
-- Dense persistent spectra are bounded by configurable row and byte limits;
-  oversized summaries can retain Gudhi homology with explicit
-  `homology_only` status.
-- Benchmark runs now pass device and dtype directly to each object, record the
-  dtype in result rows, and expose `--dtype {float32,float64}`. The benchmark
-  default remains `float32` for continuity with published comparisons.
-- `Profile.wrap_up()` now uses the same configurable, scale-aware eigenvalue
-  zero tolerance as `Complex` summaries.
-- Completed static typing cleanup while retaining Python 3.10 as the mypy
-  analysis target and minimum supported runtime.
-- Made benchmark timing fairer and more explicit: package import/device warmup
-  is excluded from complex-build timing, CUDA runs synchronize around timed
-  regions, and PETLS/PETLS-PyTorch eigensolve timing now solves an already-built
-  Laplacian instead of measuring `spectra()` side effects.
-- Empty benchmark Laplacians now complete as `0.0 ms` eigensolves instead of
-  being skipped, and the standard preset no longer applies a matrix-size cap.
-- Switched Gudhi simplex-tree boundary extraction to sparse COO matrices and
-  reused the shared extractor for Alpha complexes.
+- Simplified the supported API around native PyTorch concepts. Constructor
+  options use snake case, solver selection has one canonical setter, and
+  device and dtype configuration is exclusively object-local.
+- Filtration enumeration now includes complete zero-dimensional births and
+  merges nearly equal scales with a configurable tolerance.
+- Device, dtype, eigenvalue tolerances, and allocation policies are now
+  object-specific. CPU is the safe default, `device="auto"` is opt-in, and
+  Alpha calculations default to `float64`.
+- Oversized persistent summaries can return authoritative Gudhi homology with
+  explicit `homology_only` status instead of attempting unsafe allocations.
+- Benchmark timing now isolates complex construction, Laplacian construction,
+  and eigensolving. Device and dtype are passed directly to each object and
+  recorded in output rows.
+- Benchmark `--dtype` selection defaults to `float32` for continuity with the
+  published comparison workload.
+- Completed static typing cleanup while retaining Python 3.10 as the minimum
+  runtime and analysis target.
 
 ### Performance
 
-- Reduced small-matrix overhead with CPU-backed CUDA fallbacks, CPU mirrors for
-  small CUDA boundary matrices, NumPy assembly for small graph Laplacians, and
-  dense Gram multiplication for small sparse boundary blocks.
-- Reduced Schur-complement fallback cost by using Hermitian pseudoinverses,
-  skipping guaranteed-failing Cholesky attempts, trimming zero diagonal rows,
-  and returning known-empty Laplacians directly.
-- Avoided redundant work by marking filtered COO submatrices as coalesced,
-  warming representative backend paths outside timed regions, and removing the
-  extra sort after `torch.linalg.eigvalsh()` / `eigh()`.
+- Reduced small-matrix overhead with CPU-backed CUDA fallbacks, cached CPU
+  mirrors, NumPy incidence assembly, and efficient sparse boundary handling.
+- Reduced Schur-complement fallback cost with Hermitian pseudoinverses and
+  singular-block trimming.
+- Removed redundant eigenvalue sorting and repeated sparse conversions.
 
-### Validation
+### Fixed
 
-- `ruff check .` passes.
-- `pytest tests -k "not test_get_down_eigenvalues_match_reference and not
-  test_get_down_eigenvalues_match_mwe"` passes: `107 passed, 3 deselected`.
-  The deselected tests are the known Windows PETLS `get_down()` access
-  violation cases. The documented `uv run --with petls ... pytest` command uses
-  uv's dependency injection; `--with petls` is not a pytest option.
+- Corrected weighted zero-dimensional filtration bookkeeping throughout
+  Laplacian construction and filtration enumeration.
+- Aligned profiling summaries with object-specific, scale-aware zero
+  tolerances.
+- Ensured benchmark Alpha complexes honor requested device and dtype settings.
+
+### Removed
+
+- Removed unused C++ solver-name aliases and the no-op up-Laplacian algorithm
+  selector; Schur complementation remains the single implemented method.
+- Removed camel-case solver aliases, the positional `eigenpairs()` request-list
+  overload, and permissive unused keyword handling.
+- Removed mutable process-global device and dtype settings. Pass `device=` and
+  `dtype=` to each complex instead.
+- Removed top-level SciPy re-exports, legacy eigensolver wrappers, and the
+  compatibility-only `up_Algorithms` enum. NumPy, SciPy, and the focused
+  helpers in `petls_pytorch.core` remain directly available from their owning
+  modules.
 
 ## 1.0.2 - 2026-06-28
 

@@ -328,7 +328,10 @@ class BenchmarkRunner:
         self._print(f"  Sampled filtrations: {len(ds['filtrations'])}")
 
         complex_obj = ds["complex"]
-        complex_obj.set_eigs_Algorithm(self.algorithm)
+        if package == "petls-pytorch":
+            complex_obj.set_eigs_algorithm(self.algorithm)
+        else:
+            complex_obj.set_eigs_Algorithm(self.algorithm)
         filtrations = ds["filtrations"]
 
         if dims is None:

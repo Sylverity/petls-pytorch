@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use petls-pytorch in your research, please cite this software and the original PETLS paper."
 type: software
 title: "petls-pytorch: A PyTorch-native implementation of persistent topological Laplacians"
-version: "1.0.2"
+version: "1.1.0"
 authors:
   - family-names: "Marston"
     given-names: "Sumner K."
@@ -10,7 +10,7 @@ authors:
   - name: "Sylverity Research"
 repository-code: "https://github.com/Sylverity/petls-pytorch"
 license: Apache-2.0
-date-released: "2026-06-28"
+date-released: "2026-08-04"
 references:
   - type: article
     title: "PETLS: PErsistent Topological Laplacian Software"

@@ -5,35 +5,56 @@
 [![Python](https://img.shields.io/pypi/pyversions/petls-pytorch.svg)](https://pypi.org/project/petls-pytorch/)
 [![License](https://img.shields.io/pypi/l/petls-pytorch.svg)](LICENSE)
 
-PyTorch-native persistent topological Laplacians, with CUDA support for large
-dense eigendecompositions.
+Persistent topological Laplacians in PyTorch for weighted Alpha, Rips, directed
+flag, and cellular-sheaf complexes.
 
 Status: beta
 
-A PyTorch-native implementation of persistent topological Laplacians, based on the
-public PETLS API, PETLS documentation, and the algorithms described in the
-**PETLS** paper.
+PETLS-PyTorch brings persistent-Laplacian calculations into ordinary Python and
+PyTorch workflows while retaining the geometric and topological information
+needed to interpret the results. Its main capabilities include:
 
-The goal of this project is to make PETLS-style computations easier to use in
-Python and PyTorch workflows, especially when downstream code already works with
-torch tensors or CUDA devices. The original C++/pybind11 PETLS implementation
-remains the reference for correctness.
+- weighted and unweighted Gudhi Alpha complexes with general power weights;
+- Gudhi-backed Betti numbers and persistence intervals alongside
+  persistent-Laplacian spectra;
+- stable simplex identities and simplex-mapped harmonic representatives;
+- explicit CPU, CUDA, dtype, and numerical-tolerance controls;
+- guarded dense calculations and sparse lowest-spectrum analysis for larger
+  ordinary Hodge Laplacians; and
+- Rips, directed flag, and cellular-sheaf complex support.
+
+The original C++/pybind11 PETLS implementation remains a numerical reference
+for shared persistent-Laplacian algorithms. The Python API itself is focused on
+PyTorch conventions and does not reproduce compatibility-only C++ names.
 
 ## Contents
 
+- [Installation](#installation)
 - [Quick Start](#quick-start)
-- [Weighted Alpha Complexes](#weighted-alpha-complexes)
-- [Topology and Simplex Inspection](#topology-and-simplex-inspection)
-- [Numerical and Scaling Controls](#numerical-and-scaling-controls)
+- [Alpha Complexes and Power Weights](#alpha-complexes-and-power-weights)
+- [Topology, Persistence, and Localization](#topology-persistence-and-localization)
+- [Precision, Devices, and Scaling](#precision-devices-and-scaling)
 - [Relationship to PETLS](#relationship-to-petls)
-- [API Coverage](#api-coverage)
+- [Supported API](#supported-api)
 - [Directed Flag Files](#directed-flag-files)
 - [Benchmark Notes](#benchmark-notes)
-- [Installation](#installation)
 - [Test Suite](#test-suite)
 - [Contributing](#contributing)
 - [License](#license)
 - [Citation](#citation)
+
+## Installation
+
+```bash
+pip install petls-pytorch
+```
+
+PETLS-PyTorch supports CPython 3.10 through 3.14. For GPU acceleration,
+install a CUDA-enabled PyTorch build that matches your system using the
+[official PyTorch installer](https://pytorch.org/get-started/locally/).
+
+The runtime dependencies are `torch`, `numpy`, `scipy`, `gudhi`, `pandas`,
+`matplotlib`, and `tadasets`.
 
 ## Quick Start
 
@@ -42,9 +63,23 @@ import petls_pytorch
 import gudhi
 import torch
 
-# Alpha complex from point cloud
-alpha = petls_pytorch.Alpha(points=[[0, 0], [1, 0], [0.5, 1]], max_dim=2)
-eigs = alpha.spectra(0, 0.0, 1.0)
+# Weighted Alpha complex. Weights are general Gudhi power weights.
+alpha = petls_pytorch.Alpha(
+    points=[[0, 0], [1, 0], [1, 1], [0, 1]],
+    weights=[0.20, 0.18, 0.20, 0.18],
+    max_dim=2,
+    max_alpha_square=1.0,
+    device="cpu",
+    dtype=torch.float64,
+)
+
+# Gudhi homology is authoritative; PETLS adds persistent-Laplacian spectra.
+summary = alpha.topology_summary(dimensions=(0, 1), a=0.0, b=0.0)
+intervals = alpha.persistence_intervals(dim=1)
+
+# Advanced callers can inspect spectra and harmonic representatives directly.
+eigenvalues = alpha.spectra(dim=1, a=0.0, b=0.0)
+features = alpha.harmonic_features(dim=1, a=0.0, b=0.0)
 
 # Rips complex from distance matrix
 rips = petls_pytorch.Rips(distances=[[0, 1, 1], [1, 0, 1], [1, 1, 0]], max_dim=2)
@@ -67,13 +102,14 @@ def restriction(simplex, coface, sst):
 sst = petls_pytorch.sheaf_simplex_tree(st, extra_data, restriction)
 psl = petls_pytorch.PersistentSheafLaplacian(sst)
 filtrations = psl.get_all_filtrations()
-sheaf_eigs = psl.spectra(dim=0, a=filtrations[0], b=filtrations[-1])
+sheaf_eigenvalues = psl.spectra(dim=0, a=filtrations[0], b=filtrations[-1])
 ```
 
-For `spectra(dim, a, b)`, choose `a` and `b` from the filtration values in
-`psl.get_all_filtrations()` with `a <= b`.
+For any complex, choose `a <= b` from `get_all_filtrations()`.
+`spectra(dim, a, b)` computes the persistent-Laplacian spectrum; at `a == b`
+it is the ordinary Hodge spectrum.
 
-## Weighted Alpha Complexes
+## Alpha Complexes and Power Weights
 
 `Alpha` accepts Gudhi power weights directly. A weight is a finite scalar
 associated with a point; PETLS does not assign domain-specific meaning to it.
@@ -113,7 +149,7 @@ scales = alpha.get_all_filtrations(
 Use `include_vertex_filtrations=False` only when reproducing workflows that
 intentionally ignore zero-dimensional birth scales.
 
-## Topology and Simplex Inspection
+## Topology, Persistence, and Localization
 
 Complexes constructed from Gudhi retain `simplex_tree`,
 `simplices_by_dimension`, `simplex_filtrations`, and `simplex_to_index`.
@@ -144,12 +180,12 @@ the method caps automatic localization at ten representatives and reports
 `truncated_for_scale`; pass `max_features=` to request a different explicit
 limit.
 
-## Numerical and Scaling Controls
+## Precision, Devices, and Scaling
 
 Device and dtype are object-specific. The library default device is CPU;
 `device="auto"` opts in to CUDA when available, and `device="cuda"` requests it
 explicitly. Constructing one object never changes another object's placement.
-Weighted `Alpha` defaults to `torch.float64`; callers can select `float32` or
+`Alpha` defaults to `torch.float64`; callers can select `float32` or
 `float64` explicitly on all primary complex variants.
 
 Zero eigenvalues use the scale-aware test
@@ -184,11 +220,12 @@ Hodge spectra without pretending that full persistent spectra are sparse.
 ## Relationship to PETLS
 
 `petls-pytorch` is an independent PyTorch-native implementation of the PETLS
-methods and public API behavior, with attribution to the original PETLS paper
-and project. Correctness tests compare against the original implementation using
-shared inputs.
+methods, with attribution to the original PETLS paper and project. Correctness
+tests compare numerical results against the original implementation on shared
+inputs. The supported interface follows Python and PyTorch conventions instead
+of carrying duplicate aliases for historical C++ and pybind11 names.
 
-The full test suite includes 65 reference/parity tests against original PETLS
+The full test suite includes reference/parity tests against original PETLS
 fixtures and variants, with default comparison tolerances of `atol=1e-4` and
 `rtol=1e-3` unless a test specifies a stricter tolerance.
 
@@ -196,30 +233,23 @@ This project is based on the public PETLS API, PETLS documentation, and the
 algorithms described in the PETLS paper. No source code from the original PETLS
 implementation is included in this repository.
 
-## API Coverage
+## Supported API
 
-| Original PETLS API | PyTorch API | Status |
-|--------------------|-------------|--------|
-| `Complex` | `Complex` | Implemented |
-| `Alpha` | `Alpha` | Implemented |
-| `Rips` | `Rips` | Implemented |
-| `dFlag` | `dFlag` | Implemented |
-| `sheaf_simplex_tree` | `sheaf_simplex_tree` | Implemented |
-| `PersistentSheafLaplacian` | `PersistentSheafLaplacian` | Implemented |
-| `Profile`, `timer` | `Profile`, `Timer` | Implemented |
-| `summaries`, `plot_summary` | `summaries`, `plot_summary` | Implemented |
-| `up_Algorithms` enum | `up_Algorithms` enum | Implemented |
-| `eigvalsh_wrapper`, `sparse_wrapper`, `matrix_is_diagonal` | Same | Implemented |
-| `flipped` optimization | `flipped` + `get_L_top_dim_flipped` | Implemented |
-| `nonzero_spectra()` | `nonzero_spectra()` | Implemented |
-| `store_L()`, `store_spectra()`, `store_spectra_summary()` | Same | Implemented |
-| `time_to_csv()` | `time_to_csv()` | Implemented |
-| Weighted alpha / power weights | `Alpha(weights=..., max_alpha_square=...)` | Implemented |
-| Gudhi persistence inspection | `persistence_intervals()`, `betti_numbers_at()`, `persistent_betti()` | Implemented |
-| Topology result object | `topology_summary()` | Implemented |
-| Harmonic localization | `harmonic_features()` + simplex mappings | Implemented |
-| Allocation safeguards | `estimate_laplacian()` + row/byte guards | Implemented |
-| Sparse ordinary low spectrum | `ordinary_spectrum()` | Implemented |
+The package intentionally exposes one supported path for each operation:
+
+| Area | API |
+|------|-----|
+| Complexes | `Complex`, `Alpha`, `Rips`, `dFlag`, `PersistentSheafLaplacian` |
+| Persistent Laplacians | `get_L()`, `get_up()`, `get_down()`, `spectra()`, `eigenpairs()` |
+| Topology | `persistence_intervals()`, `betti_numbers_at()`, `persistent_betti()`, `topology_summary()` |
+| Localization | `harmonic_features()`, simplex mappings, optional point labels |
+| Scaling | `estimate_laplacian()`, allocation guards, `ordinary_spectrum()` |
+| Analysis and output | `Profile`, `Timer`, `summaries()`, `plot_summary()`, storage helpers |
+
+Solver selection uses `set_eigs_algorithm("eigvalsh")` for complete dense
+spectra or `set_eigs_algorithm("sparse", num_eigenvalues=...)` for a partial
+ordinary spectrum. Device and dtype are supplied to constructors; there is no
+mutable package-wide configuration.
 
 ## Directed Flag Files
 
@@ -318,29 +348,6 @@ python -m pip install -e .
 python -m pip install petls  # only needed for --package petls
 python -m benchmark --preset standard --package petls-pytorch --algorithm eigvalsh --device cpu
 ```
-
-## Installation
-
-```bash
-pip install petls-pytorch
-```
-
-Then import it in Python with `import petls_pytorch`.
-
-Requires CPython 3.10, 3.11, 3.12, 3.13, or 3.14.
-
-For GPU acceleration, install a CUDA-enabled PyTorch build that matches your
-system using the official selector at https://pytorch.org/get-started/locally/.
-
-Release notes are tracked in [CHANGELOG.md](CHANGELOG.md).
-
-Dependencies:
-
-- `torch`
-- `numpy`
-- `scipy`
-- `gudhi`
-- `tadasets` for benchmarks
 
 ## Test Suite
 

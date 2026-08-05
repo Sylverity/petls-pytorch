@@ -94,8 +94,7 @@ class Alpha(Complex):
         max_matrix_rows: int | None = 12_000,
         max_matrix_bytes: int | None = 4_000_000_000,
         on_oversize: str = "raise",
-        eigs_Algorithm: str = "eigvalsh",
-        up_Algorithm: str = "schur",
+        eigs_algorithm: str = "eigvalsh",
     ):
         try:
             import gudhi
@@ -173,8 +172,7 @@ class Alpha(Complex):
             max_matrix_rows=max_matrix_rows,
             max_matrix_bytes=max_matrix_bytes,
             on_oversize=on_oversize,
-            eigs_Algorithm=eigs_Algorithm,
-            up_Algorithm=up_Algorithm,
+            eigs_algorithm=eigs_algorithm,
         )
         self.alpha_complex = alpha
         self.points = point_array.copy()
