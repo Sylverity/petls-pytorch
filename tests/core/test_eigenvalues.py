@@ -101,7 +101,7 @@ def test_custom_algorithm():
     """Pass a custom callable as algorithm."""
 
     def custom_solver(L: torch.Tensor) -> torch.Tensor:
-        return torch.linalg.eigvalsh(L) * 2  # nonsense but testable
+        return torch.as_tensor(torch.linalg.eigvalsh(L) * 2)  # nonsense but testable
 
     L = torch.diag(torch.tensor([1.0, 2.0, 3.0]))
     vals = solve_eigenvalues(L, algorithm=custom_solver)

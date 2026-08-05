@@ -94,8 +94,8 @@ def _enumerate_directed_simplices(adj: np.ndarray, max_dim: int):
         weight in the simplex).
     """
     n = adj.shape[0]
-    simplices = [[] for _ in range(max_dim + 1)]
-    filtrations = [[] for _ in range(max_dim + 1)]
+    simplices: list[list[tuple[int, ...]]] = [[] for _ in range(max_dim + 1)]
+    filtrations: list[list[float]] = [[] for _ in range(max_dim + 1)]
 
     # 0-simplices: vertices with their diagonal weights
     # Cast to float32 to match C++ flagser's value_t = float precision.
@@ -204,9 +204,14 @@ class dFlag(Complex):
         self,
         filename: str,
         max_dim: int = 3,
-        device: torch.device | None = None,
-        eigs_Algorithm: str = "eigvalsh",
-        up_Algorithm: str = "schur",
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | str | None = None,
+        zero_atol: float = 1e-8,
+        zero_rtol: float = 1e-7,
+        max_matrix_rows: int | None = 12_000,
+        max_matrix_bytes: int | None = 4_000_000_000,
+        on_oversize: str = "raise",
+        eigs_algorithm: str = "eigvalsh",
     ):
         adj = _read_flag_file(filename)
         simplices, filtrations = _enumerate_directed_simplices(adj, max_dim)
@@ -225,6 +230,16 @@ class dFlag(Complex):
             boundaries=boundaries,
             filtrations=filtrations,
             device=device,
-            eigs_Algorithm=eigs_Algorithm,
-            up_Algorithm=up_Algorithm,
+            dtype=dtype,
+            zero_atol=zero_atol,
+            zero_rtol=zero_rtol,
+            max_matrix_rows=max_matrix_rows,
+            max_matrix_bytes=max_matrix_bytes,
+            on_oversize=on_oversize,
+            eigs_algorithm=eigs_algorithm,
         )
+        self.simplices_by_dimension = simplices[: actual_top_dim + 1]
+        self.simplex_to_index = [
+            {simplex: index for index, simplex in enumerate(values)}
+            for values in self.simplices_by_dimension
+        ]

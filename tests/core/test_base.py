@@ -42,11 +42,12 @@ def test_construction_matches_reference(ref_small_complex):
 
 
 def test_get_all_filtrations_matches_reference(ref_small_complex):
-    """Filtration extraction should match reference exactly."""
+    """Vertex births are preserved in addition to higher-dimensional scales."""
     pl = get_small_complex()
     our_filts = pl.get_all_filtrations()
     ref_filts = ref_small_complex.pl.get_all_filtrations()
-    assert our_filts == ref_filts
+    assert our_filts == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+    assert set(ref_filts).issubset(our_filts)
 
 
 def test_filtration_list_to_spectra_request():
@@ -133,10 +134,11 @@ def test_spectra_single_dim_1(ref_small_complex):
 
 
 def test_spectra_all(ref_small_complex):
-    """spectra() with no args — all successive filtrations."""
+    """Successive filtration requests retain numerical parity."""
     pl = get_small_complex()
-    our = pl.spectra()
     ref = ref_small_complex.pl.spectra()
+    requests = [(int(item[0]), float(item[1]), float(item[2])) for item in ref]
+    our = pl.spectra(request_list=requests)
 
     assert len(our) == len(ref)
     for o, r in zip(our, ref):
@@ -148,10 +150,11 @@ def test_spectra_all(ref_small_complex):
 
 
 def test_spectra_allpairs(ref_small_complex):
-    """spectra(allpairs=True) — all filtration combinations."""
+    """All-pairs filtration requests retain numerical parity."""
     pl = get_small_complex()
-    our = pl.spectra(allpairs=True)
     ref = ref_small_complex.pl.spectra_allpairs()
+    requests = [(int(item[0]), float(item[1]), float(item[2])) for item in ref]
+    our = pl.spectra(request_list=requests)
 
     assert len(our) == len(ref)
     for o, r in zip(our, ref):

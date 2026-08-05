@@ -204,13 +204,17 @@ class TestRipsLaplacian:
         ref = _ref_rips_points()
         test = _rips_points()
         filts = ref.pl.get_all_filtrations()
-        for dim in range(ref.pl.top_dim + 1):
+        for dim in range(1, ref.pl.top_dim + 1):
             for a in filts:
                 ref_down = torch.tensor(ref.get_down(dim, a), dtype=torch.float64)
                 test_down = test.get_down(dim, a)
                 ref_eigs = np.linalg.eigvalsh(ref_down.cpu().numpy())
                 test_eigs = np.linalg.eigvalsh(test_down.cpu().numpy())
                 np.testing.assert_allclose(ref_eigs, test_eigs, atol=ATOL, rtol=RTOL)
+
+        vertex_down = test.get_down(0, 0.0)
+        assert vertex_down.shape == (len(POINTS_RECT), len(POINTS_RECT))
+        assert torch.count_nonzero(vertex_down) == 0
 
     def test_L_equals_up_plus_down(self):
         test = _rips_points()

@@ -235,7 +235,7 @@ class TestAlphaLaplacian:
                 np.testing.assert_allclose(ref_eigs, test_eigs, atol=ATOL, rtol=RTOL)
 
     def test_get_down_eigenvalues_match_reference(self, ref_alpha_points, torch_alpha_points):
-        for dim in range(ref_alpha_points.pl.top_dim + 1):
+        for dim in range(1, ref_alpha_points.pl.top_dim + 1):
             filts = ref_alpha_points.pl.get_all_filtrations()
             for a in filts:
                 ref_down = torch.tensor(ref_alpha_points.get_down(dim, a), dtype=torch.float64)
@@ -243,6 +243,10 @@ class TestAlphaLaplacian:
                 ref_eigs = np.linalg.eigvalsh(ref_down.cpu().numpy())
                 test_eigs = np.linalg.eigvalsh(test_down.cpu().numpy())
                 np.testing.assert_allclose(ref_eigs, test_eigs, atol=ATOL, rtol=RTOL)
+
+        vertex_down = torch_alpha_points.get_down(0, 0.0)
+        assert vertex_down.shape == (len(POINTS_4), len(POINTS_4))
+        assert torch.count_nonzero(vertex_down) == 0
 
     def test_L_equals_up_plus_down(self, torch_alpha_points):
         filts = torch_alpha_points.get_all_filtrations()

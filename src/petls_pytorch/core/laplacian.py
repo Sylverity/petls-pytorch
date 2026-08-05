@@ -12,11 +12,11 @@ Reference: Memoli, Wan, Wang 2020 (Schur complement algorithm).
 from __future__ import annotations
 
 import warnings
+from typing import TYPE_CHECKING, cast
 
 import torch
-from typing import TYPE_CHECKING
 
-from petls_pytorch._config import get_device, get_dtype
+from petls_pytorch._config import DEFAULT_DEVICE, DEFAULT_DTYPE
 
 if TYPE_CHECKING:
     from petls_pytorch.core.filtered_boundary import FilteredBoundaryMatrix
@@ -49,8 +49,8 @@ def _sparse_gram(B: torch.Tensor, transpose_left: bool, dtype: torch.dtype) -> t
                 category=UserWarning,
             )
             if transpose_left:
-                return torch.sparse.mm(B.t(), B).to_dense()
-            return torch.sparse.mm(B, B.t()).to_dense()
+                return cast(torch.Tensor, torch.sparse.mm(B.t(), B).to_dense())
+            return cast(torch.Tensor, torch.sparse.mm(B, B.t()).to_dense())
     except RuntimeError:
         B_dense = B.to_dense()
         if transpose_left:
@@ -77,6 +77,7 @@ def get_down(
     fbm: FilteredBoundaryMatrix,
     a: float,
     device: torch.device | None = None,
+    dtype: torch.dtype | None = None,
 ) -> torch.Tensor:
     """
     Compute the persistent down-Laplacian L_down^{dim}(a).
@@ -99,7 +100,7 @@ def get_down(
         dim-simplices present at filtration a.
     """
     target_device = device if device is not None else fbm.device
-    dtype = get_dtype()
+    dtype = dtype if dtype is not None else fbm.matrix.dtype
     col_idx = fbm.index_of_filtration(use_domain=True, a=a)
     if col_idx < 0:
         return torch.empty(0, 0, dtype=dtype, device=target_device)
@@ -128,6 +129,7 @@ def get_up(
     a: float,
     b: float,
     device: torch.device | None = None,
+    dtype: torch.dtype | None = None,
 ) -> torch.Tensor:
     """
     Compute the persistent up-Laplacian L_up^{dim}(a,b) via Schur complement.
@@ -163,7 +165,7 @@ def get_up(
     b_col = fbm.index_of_filtration(use_domain=True, a=b)
 
     target_device = device if device is not None else fbm.device
-    dtype = get_dtype()
+    dtype = dtype if dtype is not None else fbm.matrix.dtype
 
     # Edge cases (match C++ exactly)
     if a_row == b_row:
@@ -231,6 +233,7 @@ def get_L(
     filtered_boundaries: list[FilteredBoundaryMatrix],
     top_dim: int,
     device: torch.device | None = None,
+    dtype: torch.dtype | None = None,
 ) -> torch.Tensor:
     """
     Compute the persistent Laplacian L^{dim}(a,b) = L_up + L_down.
@@ -240,8 +243,16 @@ def get_L(
       dim == top_dim → L = L_down only
       dim > top_dim  → empty matrix
     """
-    target_device = device if device is not None else get_device()
-    dtype = get_dtype()
+    target_device = (
+        device
+        if device is not None
+        else (filtered_boundaries[0].device if filtered_boundaries else DEFAULT_DEVICE)
+    )
+    dtype = (
+        dtype
+        if dtype is not None
+        else (filtered_boundaries[0].matrix.dtype if filtered_boundaries else DEFAULT_DTYPE)
+    )
     l_rows = _laplacian_rows(dim, a, filtered_boundaries, top_dim)
 
     if l_rows == 0:
@@ -258,6 +269,7 @@ def get_L(
                     cpu_boundaries,  # type: ignore[arg-type]
                     top_dim,
                     torch.device("cpu"),
+                    dtype,
                 )
                 return L_cpu.to(device=target_device, dtype=dtype)
 
@@ -265,16 +277,16 @@ def get_L(
         return torch.zeros(l_rows, l_rows, dtype=dtype, device=target_device)
 
     if dim == 0:
-        return get_up(filtered_boundaries[1], a, b, target_device)
+        return get_up(filtered_boundaries[1], a, b, target_device, dtype)
 
     if dim == top_dim:
-        return get_down(filtered_boundaries[top_dim], a, target_device)
+        return get_down(filtered_boundaries[top_dim], a, target_device, dtype)
 
     if dim > top_dim:
         return torch.empty(0, 0, dtype=dtype, device=target_device)
 
-    L_up = get_up(filtered_boundaries[dim + 1], a, b, target_device)
-    L_down = get_down(filtered_boundaries[dim], a, target_device)
+    L_up = get_up(filtered_boundaries[dim + 1], a, b, target_device, dtype)
+    L_down = get_down(filtered_boundaries[dim], a, target_device, dtype)
 
     if L_up.numel() == 0:
         return L_down

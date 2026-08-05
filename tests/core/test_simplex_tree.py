@@ -36,7 +36,5 @@ def test_simplex_tree_filtrations():
 
     pl = Complex(simplex_tree=st)
     filts = pl.get_all_filtrations()
-    # get_all_filtrations returns domain filtrations only (edges, triangles, etc.)
-    # plus the dummy d_0 domain [0.0]. Vertex filtrations are range filtrations
-    # of d_1 and are NOT included.
-    assert filts == [0.0, 3.0, 4.0, 5.0, 6.0]
+    assert filts == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+    assert pl.get_all_filtrations(include_vertex_filtrations=False) == [3.0, 4.0, 5.0, 6.0]

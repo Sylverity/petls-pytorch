@@ -1,9 +1,4 @@
-"""
-Feature-parity tests against the original PETLS Python API.
-
-These tests verify that petls_pytorch exposes the same public signatures and
-convenience names as the original ``petls`` package.
-"""
+"""Focused API behavior that complements numerical PETLS parity tests."""
 
 import numpy as np
 import pytest
@@ -34,23 +29,17 @@ def test_eigenpairs_allpairs_signature(small_complex):
         assert isinstance(vecs, torch.Tensor)
 
 
-def test_eigenpairs_single_positional_request_list(small_complex):
-    """A single positional argument is treated as a request list."""
-    request = [[0, 3.0, 4.0]]
-    result = small_complex.eigenpairs(request)
-    assert isinstance(result, list)
-    assert len(result) == 1
-    dim, a, b, vals, vecs = result[0]
-    assert dim == 0
-    assert a == pytest.approx(3.0)
-    assert b == pytest.approx(4.0)
-
-
 def test_set_eigs_algorithm_kwargs(small_complex):
     """set_eigs_algorithm accepts num_eigenvalues and eigenvalue_order."""
     small_complex.set_eigs_algorithm("sparse", num_eigenvalues=2, eigenvalue_order="LM")
     assert small_complex._num_eigenvalues == 2
     assert small_complex._eigenvalue_order == "LM"
+
+
+@pytest.mark.parametrize("algorithm", ["selfadjoint", "eigensolver", "bdcsvd", "spectra"])
+def test_cpp_solver_aliases_are_not_supported(small_complex, algorithm):
+    with pytest.raises(ValueError, match="algorithm must be"):
+        small_complex.set_eigs_algorithm(algorithm)
 
 
 def test_print_boundaries_does_not_raise(small_complex, capsys):
@@ -72,15 +61,18 @@ def test_profile_wrap_up(small_complex):
     assert profile.lambdas == [1.0]
 
 
-def test_eigvalsh_export():
-    """petls_pytorch exposes scipy.linalg.eigvalsh like the original package."""
-    from scipy.linalg import eigvalsh as scipy_eigvalsh
+def test_profile_uses_scale_aware_object_tolerance():
+    profile = petls_pytorch.Profile(zero_atol=0.1, zero_rtol=0.0)
+    profile.wrap_up(dim=0, a=0.0, b=0.0, L_rows=3, eigs=[0.0, 0.05, 1.0])
 
-    assert petls_pytorch.eigvalsh is scipy_eigvalsh
+    assert profile.bettis == [2]
+    assert profile.lambdas == [1.0]
 
-
-def test_coo_matrix_export():
-    """petls_pytorch exposes scipy.sparse.coo_matrix like the original package."""
-    from scipy.sparse import coo_matrix as scipy_coo_matrix
-
-    assert petls_pytorch.coo_matrix is scipy_coo_matrix
+    complex_ = petls_pytorch.Complex(
+        boundaries=[],
+        filtrations=[[0.0]],
+        zero_atol=0.2,
+        zero_rtol=0.03,
+    )
+    assert complex_.profile.zero_atol == pytest.approx(0.2)
+    assert complex_.profile.zero_rtol == pytest.approx(0.03)

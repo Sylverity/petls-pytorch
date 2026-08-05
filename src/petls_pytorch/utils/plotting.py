@@ -7,27 +7,27 @@ Mirrors petls.PLutil.summaries and plot_summary.
 from __future__ import annotations
 
 import numpy as np
-from typing import Callable, List, Tuple
+from collections.abc import Callable
 
 
 def summaries(
-    spectra: List[Tuple[int, float, float, List[float]]],
-    func: Callable,
+    spectra: list[tuple[int, float, float, list[float]]],
+    func: Callable[[list[float]], float],
     lower_triangle: float = np.nan,
-) -> Tuple[List[np.ndarray], List[float], List[int]]:
+) -> tuple[list[np.ndarray], list[float], list[int]]:
     """
     Apply a function to eigenvalues for all (dim, a, b, eigs) tuples.
 
     Returns summary arrays shaped like persistence diagrams.
     """
-    all_filtrations = set()
-    dims = set()
+    all_filtrations_set: set[float] = set()
+    dims: set[int] = set()
     for dim, a, b, eigs in spectra:
-        all_filtrations.add(a)
-        all_filtrations.add(b)
+        all_filtrations_set.add(a)
+        all_filtrations_set.add(b)
         dims.add(dim)
 
-    all_filtrations = sorted(list(all_filtrations))
+    all_filtrations = sorted(all_filtrations_set)
     indexed_filtrations = {a: i for i, a in enumerate(all_filtrations)}
     indexed_dims = {dim: i for i, dim in enumerate(sorted(list(dims)))}
     num_filtrations = len(all_filtrations)

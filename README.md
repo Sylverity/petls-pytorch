@@ -5,42 +5,82 @@
 [![Python](https://img.shields.io/pypi/pyversions/petls-pytorch.svg)](https://pypi.org/project/petls-pytorch/)
 [![License](https://img.shields.io/pypi/l/petls-pytorch.svg)](LICENSE)
 
-PyTorch-native persistent topological Laplacians, with CUDA support for large
-dense eigendecompositions.
+Persistent topological Laplacians in PyTorch for weighted Alpha, Rips, directed
+flag, and cellular-sheaf complexes.
 
 Status: beta
 
-A PyTorch-native implementation of persistent topological Laplacians, based on the
-public PETLS API, PETLS documentation, and the algorithms described in the
-**PETLS** paper.
+PETLS-PyTorch brings persistent-Laplacian calculations into ordinary Python and
+PyTorch workflows while retaining the geometric and topological information
+needed to interpret the results. Its main capabilities include:
 
-The goal of this project is to make PETLS-style computations easier to use in
-Python and PyTorch workflows, especially when downstream code already works with
-torch tensors or CUDA devices. The original C++/pybind11 PETLS implementation
-remains the reference for correctness.
+- weighted and unweighted Gudhi Alpha complexes with general power weights;
+- Gudhi-backed Betti numbers and persistence intervals alongside
+  persistent-Laplacian spectra;
+- stable simplex identities and simplex-mapped harmonic representatives;
+- explicit CPU, CUDA, dtype, and numerical-tolerance controls;
+- guarded dense calculations and sparse lowest-spectrum analysis for larger
+  ordinary Hodge Laplacians; and
+- Rips, directed flag, and cellular-sheaf complex support.
+
+The original C++/pybind11 PETLS implementation remains a numerical reference
+for shared persistent-Laplacian algorithms. The Python API itself is focused on
+PyTorch conventions and does not reproduce compatibility-only C++ names.
 
 ## Contents
 
+- [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Alpha Complexes and Power Weights](#alpha-complexes-and-power-weights)
+- [Topology, Persistence, and Localization](#topology-persistence-and-localization)
+- [Precision, Devices, and Scaling](#precision-devices-and-scaling)
 - [Relationship to PETLS](#relationship-to-petls)
-- [API Coverage](#api-coverage)
+- [Supported API](#supported-api)
 - [Directed Flag Files](#directed-flag-files)
 - [Benchmark Notes](#benchmark-notes)
-- [Installation](#installation)
 - [Test Suite](#test-suite)
 - [Contributing](#contributing)
 - [License](#license)
 - [Citation](#citation)
+
+## Installation
+
+```bash
+pip install petls-pytorch
+```
+
+PETLS-PyTorch supports CPython 3.10 through 3.14. For GPU acceleration,
+install a CUDA-enabled PyTorch build that matches your system using the
+[official PyTorch installer](https://pytorch.org/get-started/locally/).
+
+The runtime dependencies are `torch`, `numpy`, `scipy`, `gudhi`, `pandas`, and
+`matplotlib`. Benchmark datasets use the optional `benchmark` extra, which adds
+`tadasets` without expanding the runtime install closure.
 
 ## Quick Start
 
 ```python
 import petls_pytorch
 import gudhi
+import torch
 
-# Alpha complex from point cloud
-alpha = petls_pytorch.Alpha(points=[[0, 0], [1, 0], [0.5, 1]], max_dim=2)
-eigs = alpha.spectra(0, 0.0, 1.0)
+# Weighted Alpha complex. Weights are general Gudhi power weights.
+alpha = petls_pytorch.Alpha(
+    points=[[0, 0], [1, 0], [1, 1], [0, 1]],
+    weights=[0.20, 0.18, 0.20, 0.18],
+    max_dim=2,
+    max_alpha_square=1.0,
+    device="cpu",
+    dtype=torch.float64,
+)
+
+# Gudhi homology is authoritative; PETLS adds persistent-Laplacian spectra.
+summary = alpha.topology_summary(dimensions=(0, 1), a=0.0, b=0.0)
+intervals = alpha.persistence_intervals(dim=1)
+
+# Advanced callers can inspect spectra and harmonic representatives directly.
+eigenvalues = alpha.spectra(dim=1, a=0.0, b=0.0)
+features = alpha.harmonic_features(dim=1, a=0.0, b=0.0)
 
 # Rips complex from distance matrix
 rips = petls_pytorch.Rips(distances=[[0, 1, 1], [1, 0, 1], [1, 1, 0]], max_dim=2)
@@ -63,20 +103,137 @@ def restriction(simplex, coface, sst):
 sst = petls_pytorch.sheaf_simplex_tree(st, extra_data, restriction)
 psl = petls_pytorch.PersistentSheafLaplacian(sst)
 filtrations = psl.get_all_filtrations()
-sheaf_eigs = psl.spectra(dim=0, a=filtrations[0], b=filtrations[-1])
+sheaf_eigenvalues = psl.spectra(dim=0, a=filtrations[0], b=filtrations[-1])
 ```
 
-For `spectra(dim, a, b)`, choose `a` and `b` from the filtration values in
-`psl.get_all_filtrations()` with `a <= b`.
+For any complex, choose `a <= b` from `get_all_filtrations()`.
+`spectra(dim, a, b)` computes the persistent-Laplacian spectrum; at `a == b`
+it is the ordinary Hodge spectrum.
+
+## Alpha Complexes and Power Weights
+
+`Alpha` accepts Gudhi power weights directly. A weight is a finite scalar
+associated with a point; PETLS does not assign domain-specific meaning to it.
+Callers are responsible for deriving weights appropriate to their application.
+
+```python
+alpha = petls_pytorch.Alpha(
+    points=positions,
+    weights=power_weights,
+    max_dim=3,
+    precision="safe",
+    max_alpha_square=maximum_scale,
+    point_labels=labels,  # optional; kept separate from topology
+    device="cpu",
+    dtype=torch.float64,
+    zero_atol=1e-8,
+    zero_rtol=1e-7,
+)
+```
+
+The constructor validates point and weight shapes and finite values. Weighted
+vertex births, including negative filtration values, are retained. The
+`max_alpha_square` cutoff is passed to Gudhi during construction so simplices
+beyond the analysis range are never built. Passing no weights retains ordinary
+unweighted-alpha behavior.
+
+Filtration enumeration includes real vertex births and merges numerical
+near-duplicates by default:
+
+```python
+scales = alpha.get_all_filtrations(
+    merge_tolerance=1e-10,
+    include_vertex_filtrations=True,
+)
+```
+
+Use `include_vertex_filtrations=False` only when reproducing workflows that
+intentionally ignore zero-dimensional birth scales.
+
+## Topology, Persistence, and Localization
+
+Complexes constructed from Gudhi retain `simplex_tree`,
+`simplices_by_dimension`, `simplex_filtrations`, and `simplex_to_index`.
+Consequently, every Laplacian row and eigenvector coordinate has a stable
+simplex identity. If `point_labels` are supplied to `Alpha`, corresponding
+label tuples are available in `simplex_labels_by_dimension` and harmonic
+feature results.
+
+```python
+summary = alpha.topology_summary(dimensions=(0, 1, 2), a=0.0, b=0.0)
+intervals = alpha.persistence_intervals(dim=1)
+bettis = alpha.betti_numbers_at(scale=0.0)
+rank = alpha.persistent_betti(dim=1, birth_scale=0.0, death_scale=0.5)
+features = alpha.harmonic_features(dim=1, a=0.0, b=0.0)
+```
+
+At `a == b`, `topology_summary()` reports ordinary Betti numbers. At `a < b`,
+it reports persistent Betti numbers. Gudhi persistence is the authoritative
+homology source when available; persistent-Laplacian nullity, least nonzero
+eigenvalues, the effective zero tolerance, smallest eigenvalues, matrix rows,
+cost estimates, and per-dimension calculation status are returned separately
+for numerical auditing. Requested dimensions above the complex's `top_dim`
+return Betti number zero and an empty spectrum.
+
+`harmonic_features()` returns each numerical zero-mode eigenvector as
+simplex/coefficient records. Harmonic bases need not be unique, but their
+coordinates always follow the retained simplex order. For oversized ordinary
+calculations (`a == b`), the sparse path caps automatic localization at ten
+representatives and reports `truncated_for_scale`; pass `max_features=` to
+request a different explicit limit. Persistent localization (`a < b`) requires
+the dense Schur-complement Laplacian and raises `LaplacianSizeError` when either
+its output or peak intermediate allocation exceeds the configured guard.
+
+## Precision, Devices, and Scaling
+
+Device and dtype are object-specific. The library default device is CPU;
+`device="auto"` opts in to CUDA when available, and `device="cuda"` requests it
+explicitly. Constructing one object never changes another object's placement.
+`Alpha` defaults to `torch.float64`; callers can select `float32` or
+`float64` explicitly on all primary complex variants.
+
+Zero eigenvalues use the scale-aware test
+`abs(lambda) <= zero_atol + zero_rtol * max(abs(spectrum))`. Summary results
+report the effective tolerance and smallest eigenvalues so borderline modes can
+be inspected.
+
+Dense allocations are guarded before construction. Estimates report the final
+matrix at filtration `a` and the larger Schur-complement intermediate that may
+be required at filtration `b`. The defaults are 12,000 rows and 4 GB for the
+largest dense matrix in the calculation, and both are configurable per object:
+
+```python
+estimate = alpha.estimate_laplacian(dim=1, a=0.0, b=0.0)
+
+guarded = petls_pytorch.Alpha(
+    points=positions,
+    weights=power_weights,
+    max_matrix_rows=12_000,
+    max_matrix_bytes=4_000_000_000,
+    on_oversize="homology_only",  # or "raise"
+)
+```
+
+`ordinary_spectrum(dim, scale, num_eigenvalues)` builds sparse boundary Gram
+matrices and calls SciPy's sparse symmetric eigensolver without first creating
+a dense Laplacian. The same path is used by `spectra()` for `a == b` after
+`set_eigs_algorithm("sparse", ..., eigenvalue_order="SM")`; `SM`, `SA`, `LM`,
+`LA`, and `BE` selection is honored consistently. Persistent Schur complements
+can become dense, so oversized `a < b` requests either raise
+`LaplacianSizeError` or return Gudhi homology-only status through
+`topology_summary()`. This distinction is intentional: large systems retain
+authoritative homology and ordinary sparse Hodge spectra without pretending
+that full persistent spectra are sparse.
 
 ## Relationship to PETLS
 
 `petls-pytorch` is an independent PyTorch-native implementation of the PETLS
-methods and public API behavior, with attribution to the original PETLS paper
-and project. Correctness tests compare against the original implementation using
-shared inputs.
+methods, with attribution to the original PETLS paper and project. Correctness
+tests compare numerical results against the original implementation on shared
+inputs. The supported interface follows Python and PyTorch conventions instead
+of carrying duplicate aliases for historical C++ and pybind11 names.
 
-The full test suite includes 65 reference/parity tests against original PETLS
+The full test suite includes reference/parity tests against original PETLS
 fixtures and variants, with default comparison tolerances of `atol=1e-4` and
 `rtol=1e-3` unless a test specifies a stricter tolerance.
 
@@ -84,24 +241,23 @@ This project is based on the public PETLS API, PETLS documentation, and the
 algorithms described in the PETLS paper. No source code from the original PETLS
 implementation is included in this repository.
 
-## API Coverage
+## Supported API
 
-| Original PETLS API | PyTorch API | Status |
-|--------------------|-------------|--------|
-| `Complex` | `Complex` | Implemented |
-| `Alpha` | `Alpha` | Implemented |
-| `Rips` | `Rips` | Implemented |
-| `dFlag` | `dFlag` | Implemented |
-| `sheaf_simplex_tree` | `sheaf_simplex_tree` | Implemented |
-| `PersistentSheafLaplacian` | `PersistentSheafLaplacian` | Implemented |
-| `Profile`, `timer` | `Profile`, `Timer` | Implemented |
-| `summaries`, `plot_summary` | `summaries`, `plot_summary` | Implemented |
-| `up_Algorithms` enum | `up_Algorithms` enum | Implemented |
-| `eigvalsh_wrapper`, `sparse_wrapper`, `matrix_is_diagonal` | Same | Implemented |
-| `flipped` optimization | `flipped` + `get_L_top_dim_flipped` | Implemented |
-| `nonzero_spectra()` | `nonzero_spectra()` | Implemented |
-| `store_L()`, `store_spectra()`, `store_spectra_summary()` | Same | Implemented |
-| `time_to_csv()` | `time_to_csv()` | Implemented |
+The package intentionally exposes one supported path for each operation:
+
+| Area | API |
+|------|-----|
+| Complexes | `Complex`, `Alpha`, `Rips`, `dFlag`, `PersistentSheafLaplacian` |
+| Persistent Laplacians | `get_L()`, `get_up()`, `get_down()`, `spectra()`, `eigenpairs()` |
+| Topology | `persistence_intervals()`, `betti_numbers_at()`, `persistent_betti()`, `topology_summary()` |
+| Localization | `harmonic_features()`, simplex mappings, optional point labels |
+| Scaling | `estimate_laplacian()`, allocation guards, `ordinary_spectrum()` |
+| Analysis and output | `Profile`, `Timer`, `summaries()`, `plot_summary()`, storage helpers |
+
+Solver selection uses `set_eigs_algorithm("eigvalsh")` for complete dense
+spectra or `set_eigs_algorithm("sparse", num_eigenvalues=...)` for a partial
+ordinary spectrum. Device and dtype are supplied to constructors; there is no
+mutable package-wide configuration.
 
 ## Directed Flag Files
 
@@ -157,14 +313,14 @@ wins with no skipped benchmark rows.
 
 ## Running Benchmarks
 
-From a source checkout, run the benchmark module with `uv`. The benchmark harness needs the
-`benchmark` extra (it pulls in `tadasets`), so pass `--extra benchmark`. Add `--with petls`
-when benchmarking against the original PETLS package.
+From a source checkout, run the benchmark module with `uv`. The benchmark
+harness needs the `benchmark` extra, which provides `tadasets`; add
+`--with petls` when benchmarking against the original PETLS package.
 
 ```bash
 # Representative CPU/GPU comparison
 uv run --extra benchmark python -m benchmark --preset standard --package petls-pytorch --algorithm eigvalsh --device cpu
-uv run --extra benchmark python -m benchmark --preset standard --package petls-pytorch --algorithm eigvalsh --device cuda
+uv run --extra benchmark python -m benchmark --preset standard --package petls-pytorch --algorithm eigvalsh --device cuda --dtype float32
 
 # Reference PETLS, if installed for your platform
 uv run --extra benchmark --with petls python -m benchmark --preset standard --package petls --algorithm selfadjoint
@@ -175,9 +331,16 @@ uv run --extra benchmark python -m benchmark --preset stress --package petls-pyt
 # Custom single run
 uv run --extra benchmark python -m benchmark \
     --dataset torus --n_points 2000 --complex alpha --max_dim 3 \
-    --package petls-pytorch --algorithm eigvalsh --device cuda \
+    --package petls-pytorch --algorithm eigvalsh --device cuda --dtype float32 \
     --max_matrix_rows 12000
 ```
+
+Benchmark device and dtype are passed directly to each PETLS-PyTorch object and
+recorded in CSV output. The benchmark CLI defaults to `float32` to preserve the
+historical comparison workload; pass `--dtype float64` to benchmark the
+higher-precision weighted-Alpha default used by the scientific API. Original
+PETLS does not expose the PyTorch dtype selection, so its result rows and
+dataset metadata report `dtype="native"`.
 
 By default, benchmark files are written under `benchmark-results/results`. Use
 `--output_dir benchmark-results/<run-name>` to keep named runs together.
@@ -197,29 +360,6 @@ python -m pip install petls  # only needed for --package petls
 python -m benchmark --preset standard --package petls-pytorch --algorithm eigvalsh --device cpu
 ```
 
-## Installation
-
-```bash
-pip install petls-pytorch
-```
-
-Then import it in Python with `import petls_pytorch`.
-
-Requires CPython 3.10, 3.11, 3.12, 3.13, or 3.14.
-
-For GPU acceleration, install a CUDA-enabled PyTorch build that matches your
-system using the official selector at https://pytorch.org/get-started/locally/.
-
-Release notes are tracked in [CHANGELOG.md](CHANGELOG.md).
-
-Dependencies:
-
-- `torch`
-- `numpy`
-- `scipy`
-- `gudhi`
-- `tadasets` for benchmarks
-
 ## Test Suite
 
 From a source checkout, run the default test suite with development
@@ -229,12 +369,31 @@ dependencies:
 uv run --extra dev pytest tests/ -v
 ```
 
+Run the same release-quality checks used by CI from the active supported Python
+environment:
+
+```bash
+uv run --extra dev ruff format --check .
+uv run --extra dev ruff check .
+uv run --extra dev mypy src/petls_pytorch benchmark
+```
+
 By default, tests that compare against the original PETLS package are skipped
 when `petls` is not installed. To run the full parity suite against the
-reference implementation:
+reference implementation, use `uv run --with petls` to add PETLS to the
+temporary run environment:
 
 ```bash
 uv run --extra dev --with petls pytest tests/ -v
+```
+
+On Windows, PETLS `get_down()` reference calls can trigger access violations in
+the original native package for the Rips, Alpha, and dFlag comparison cases. To
+avoid those platform-specific crashes while still running the rest of the suite,
+exclude those reference checks:
+
+```bash
+uv run --extra dev --with petls pytest tests/ -v -k "not test_get_down_eigenvalues_match_reference and not test_get_down_eigenvalues_match_mwe"
 ```
 
 If you are not using `uv`, install the package and test dependencies first:

@@ -1,18 +1,11 @@
 """
 PETLS — GPU-Native Persistent Topological Laplacians in PyTorch.
 
-This is the public API. It mirrors the original PETLS interface where possible,
-but is implemented entirely in Python with PyTorch tensors.
+This module exposes the supported PyTorch API without compatibility aliases or
+third-party namespace re-exports.
 """
 
-import enum
-
-import numpy as np
-from scipy.linalg import eigvalsh
-from scipy.sparse import coo_matrix
-
-from petls_pytorch._config import get_device, get_dtype, set_device, set_dtype
-from petls_pytorch.core.complex import Complex
+from petls_pytorch.core.complex import Complex, LaplacianSizeError
 from petls_pytorch.core.profile import Profile, Timer
 
 from petls_pytorch.variants.alpha import Alpha
@@ -22,77 +15,14 @@ from petls_pytorch.variants.sheaf import sheaf_simplex_tree, PersistentSheafLapl
 from petls_pytorch.utils.plotting import summaries, plot_summary
 from petls_pytorch.utils.simplex_tree import simplex_tree_boundaries_filtrations
 
-__version__ = "1.0.2"
-
-
-class UpAlgorithms(enum.Enum):
-    """Enum to choose the up-Laplacian algorithm (mirrors original PETLS)."""
-
-    schur = 1
-
-
-# Backwards-compatible alias used by the original PETLS API.
-up_Algorithms = UpAlgorithms
-
-
-def matrix_is_diagonal(L: np.ndarray) -> bool:
-    """Fast check whether a square numpy array is diagonal."""
-    i, j = L.shape
-    assert i == j
-    test = L.reshape(-1)[:-1].reshape(i - 1, j + 1)
-    return not np.any(test[:, 1:])
-
-
-def eigvalsh_wrapper(L: np.ndarray) -> np.ndarray:
-    """Wrapper around scipy.linalg.eigvalsh with diagonal short-circuit."""
-    if matrix_is_diagonal(L):
-        return np.array(sorted(np.diag(L)))
-    return eigvalsh(L)
-
-
-def sparse_wrapper(
-    L: np.ndarray, num_eigs: int = 10, which_eigs: str = "SM", ncv: int = 20
-) -> np.ndarray:
-    """Wrapper around scipy.sparse.linalg.eigs with fallbacks."""
-    import scipy.sparse.linalg
-
-    if matrix_is_diagonal(L):
-        return np.array(sorted(np.diag(L)))
-
-    num_rows = L.shape[0]
-    num_eigs = min(num_rows - 1, num_eigs)
-    ncv = min(max(2 * num_eigs, ncv), num_rows)
-
-    try:
-        eigs = scipy.sparse.linalg.eigs(
-            L, k=num_eigs, ncv=ncv, which=which_eigs, return_eigenvectors=False
-        )
-        return np.array(sorted(eigs.real))
-    except Exception:
-        all_eigs = eigvalsh(L)
-        if which_eigs in ("SM", "SA"):
-            return np.array(all_eigs[:num_eigs])
-        elif which_eigs in ("LM", "LA"):
-            return all_eigs[-num_eigs:]
-        elif which_eigs == "BE":
-            lowest = all_eigs[: num_eigs // 2]
-            if num_eigs % 2 == 1:
-                highest = all_eigs[-(num_eigs // 2 + 1) :]
-            else:
-                highest = all_eigs[-(num_eigs // 2) :]
-            return np.concatenate((lowest, highest))
-        else:
-            return all_eigs
+__version__ = "1.1.0"
 
 
 __all__ = [
     "Complex",
+    "LaplacianSizeError",
     "Profile",
     "Timer",
-    "get_device",
-    "get_dtype",
-    "set_device",
-    "set_dtype",
     "Alpha",
     "dFlag",
     "Rips",
@@ -100,12 +30,5 @@ __all__ = [
     "PersistentSheafLaplacian",
     "summaries",
     "plot_summary",
-    "UpAlgorithms",
-    "up_Algorithms",
-    "eigvalsh",
-    "eigvalsh_wrapper",
-    "sparse_wrapper",
-    "matrix_is_diagonal",
-    "coo_matrix",
     "simplex_tree_boundaries_filtrations",
 ]

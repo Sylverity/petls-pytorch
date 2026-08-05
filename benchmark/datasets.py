@@ -12,7 +12,7 @@ Each dataset produces point clouds that are fed into Alpha or Rips complexes.
 
 import numpy as np
 import tadasets
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, cast
 import json
 from pathlib import Path
 
@@ -71,13 +71,13 @@ def generate_point_cloud(name: str, n: int, seed: int = 42) -> np.ndarray:
 
     if gen == "torus":
         params["n"] = n
-        return tadasets.torus(**params)
+        return cast(np.ndarray, tadasets.torus(**params))
     elif gen == "sphere":
         params["n"] = n
-        return tadasets.sphere(**params)
+        return cast(np.ndarray, tadasets.sphere(**params))
     elif gen == "swiss_roll":
         params["n"] = n
-        return tadasets.swiss_roll(**params)
+        return cast(np.ndarray, tadasets.swiss_roll(**params))
     elif gen == "klein_bottle":
         return _klein_bottle(n, noise=params.get("noise", 0.0), seed=seed)
     else:
@@ -107,11 +107,11 @@ def choose_filtrations(
     arr = np.array(filtrations)
     if mode == "quantile":
         idx = np.linspace(0, len(arr) - 1, num_samples, dtype=int)
-        return arr[idx].tolist()
+        return cast(list[float], arr[idx].tolist())
     elif mode == "log":
         # Log spacing over index space
         idx = np.unique(np.geomspace(1, len(arr), num_samples).astype(int) - 1)
-        return arr[idx].tolist()
+        return cast(list[float], arr[idx].tolist())
     elif mode == "early":
         # Densely sample first half, sparsely second half
         n_early = num_samples // 2
@@ -119,7 +119,7 @@ def choose_filtrations(
         idx_early = np.linspace(0, len(arr) // 2, n_early, dtype=int)
         idx_late = np.linspace(len(arr) // 2, len(arr) - 1, n_late, dtype=int)
         idx = np.unique(np.concatenate([idx_early, idx_late]))
-        return arr[idx].tolist()
+        return cast(list[float], arr[idx].tolist())
     else:
         raise ValueError(f"Unknown mode '{mode}'")
 
@@ -137,6 +137,7 @@ def generate_dataset(
     device: Optional[str] = None,
     compute_matrix_stats: bool = False,
     rips_threshold_quantile: Optional[float] = None,
+    dtype: str = "float32",
 ) -> dict:
     """
     Generate a complete benchmark dataset: point cloud -> complex -> sampled filtrations.
@@ -154,6 +155,10 @@ def generate_dataset(
     persistent Laplacians and can dominate benchmark runtime.
     """
     package = package.lower()
+    if dtype not in {"float32", "float64"}:
+        raise ValueError("dtype must be 'float32' or 'float64'")
+    reported_dtype = dtype if package == "petls-pytorch" else "native"
+    backend_kwargs = {}
     if package == "petls":
         import petls
 
@@ -162,17 +167,19 @@ def generate_dataset(
     elif package == "petls-pytorch":
         import petls_pytorch
 
-        if device is not None:
-            petls_pytorch.set_device(device)
         Alpha = petls_pytorch.Alpha
         Rips = petls_pytorch.Rips
+        backend_kwargs = {
+            "device": "cpu" if device is None else device,
+            "dtype": reported_dtype,
+        }
     else:
         raise ValueError(f"package must be 'petls' or 'petls-pytorch', got {package}")
 
     points = generate_point_cloud(name, n_points, seed=seed)
 
     if complex_type.lower() == "alpha":
-        complex_obj = Alpha(points=points.tolist(), max_dim=max_dim)
+        complex_obj = Alpha(points=points.tolist(), max_dim=max_dim, **backend_kwargs)
     elif complex_type.lower() == "rips":
         from scipy.spatial.distance import pdist
 
@@ -184,7 +191,12 @@ def generate_dataset(
         else:
             # Cover the diameter by default, matching the previous behavior.
             threshold = float(distances.max() * 1.1)
-        complex_obj = Rips(points=points.tolist(), max_dim=max_dim, threshold=threshold)
+        complex_obj = Rips(
+            points=points.tolist(),
+            max_dim=max_dim,
+            threshold=threshold,
+            **backend_kwargs,
+        )
     else:
         raise ValueError(f"complex_type must be 'alpha' or 'rips', got {complex_type}")
 
@@ -230,7 +242,8 @@ def generate_dataset(
             "seed": seed,
             "filtration_mode": filtration_mode,
             "package": package,
-            "device": device,
+            "device": "cpu" if device is None else device,
+            "dtype": reported_dtype,
             "compute_matrix_stats": compute_matrix_stats,
             "rips_threshold_quantile": rips_threshold_quantile,
             **DATASET_REGISTRY[name]["params"],
@@ -242,8 +255,8 @@ def generate_dataset(
         p.mkdir(parents=True, exist_ok=True)
         meta = {k: v for k, v in result.items() if k not in ("points", "complex", "matrix_stats")}
         meta["matrix_stats"] = matrix_stats
-        with open(p / f"{name}_{n_points}_{complex_type}_meta.json", "w") as f:
-            json.dump(meta, f, indent=2)
+        with open(p / f"{name}_{n_points}_{complex_type}_meta.json", "w") as fh:
+            json.dump(meta, fh, indent=2)
         np.save(p / f"{name}_{n_points}_points.npy", points)
 
     return result

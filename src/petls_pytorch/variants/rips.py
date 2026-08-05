@@ -33,7 +33,7 @@ def _read_lower_distance_matrix(path: str) -> np.ndarray:
     Returns a dense symmetric ``(n, n)`` numpy array with zeros on the
     diagonal.
     """
-    rows = []
+    rows: list[list[float]] = []
     with open(path, "r") as fh:
         for line in fh:
             line = line.strip()
@@ -59,10 +59,10 @@ def _read_lower_distance_matrix(path: str) -> np.ndarray:
 
 
 def _pad_to_max_dim(
-    boundaries: list[np.ndarray],
+    boundaries: list,
     filtrations: list[list[float]],
     max_dim: int,
-) -> tuple[list[np.ndarray], list[list[float]]]:
+) -> tuple[list, list[list[float]]]:
     """Pad boundaries and filtrations so that top_dim == max_dim.
 
     The original C++ Rips class always creates empty boundary matrices and
@@ -122,9 +122,14 @@ class Rips(Complex):
         distances: list[list[float]] | np.ndarray | None = None,
         max_dim: int = 3,
         threshold: float | None = None,
-        device: torch.device | None = None,
-        eigs_Algorithm: str = "eigvalsh",
-        up_Algorithm: str = "schur",
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | str | None = None,
+        zero_atol: float = 1e-8,
+        zero_rtol: float = 1e-7,
+        max_matrix_rows: int | None = 12_000,
+        max_matrix_bytes: int | None = 4_000_000_000,
+        on_oversize: str = "raise",
+        eigs_algorithm: str = "eigvalsh",
     ):
         try:
             import gudhi
@@ -173,7 +178,13 @@ class Rips(Complex):
         super().__init__(
             boundaries=boundaries,
             filtrations=filtrations,
+            simplex_tree=simplex_tree,
             device=device,
-            eigs_Algorithm=eigs_Algorithm,
-            up_Algorithm=up_Algorithm,
+            dtype=dtype,
+            zero_atol=zero_atol,
+            zero_rtol=zero_rtol,
+            max_matrix_rows=max_matrix_rows,
+            max_matrix_bytes=max_matrix_bytes,
+            on_oversize=on_oversize,
+            eigs_algorithm=eigs_algorithm,
         )

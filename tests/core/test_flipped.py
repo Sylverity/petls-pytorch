@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
-from petls_pytorch.core.complex import Complex
+from petls_pytorch.core.complex import Complex, LaplacianSizeError
 
 
 ATOL = 1e-4
@@ -35,6 +36,40 @@ def test_flipped_eigenvalues_match_regular():
     eigs_flipped = pl.spectra(2, 5, 5)
 
     np.testing.assert_allclose(eigs_regular, eigs_flipped, atol=ATOL, rtol=RTOL)
+
+
+def test_flipped_optimization_preserves_spectrum_when_matrix_is_smaller():
+    boundary = np.array([[-1.0, -1.0, 0.0], [1.0, 0.0, 1.0]])
+    complex_ = Complex(
+        boundaries=[boundary],
+        filtrations=[[0.0, 0.0], [0.0, 0.0, 0.0]],
+    )
+
+    regular = complex_.spectra(1, 0.0, 0.0)
+    assert complex_.get_L_top_dim_flipped(0.0).shape == (2, 2)
+    complex_.flipped = True
+    flipped = complex_.spectra(1, 0.0, 0.0)
+
+    np.testing.assert_allclose(regular, flipped, atol=ATOL, rtol=RTOL)
+
+
+def test_flipped_path_guards_actual_size_and_is_used_only_when_smaller():
+    boundary = np.ones((10, 1), dtype=np.float64)
+    complex_ = Complex(
+        boundaries=[boundary],
+        filtrations=[[0.0] * 10, [0.0]],
+        max_matrix_rows=5,
+    )
+    complex_.flipped = True
+
+    estimate = complex_.estimate_laplacian(dim=1, a=0.0)
+    assert estimate["peak_rows"] == 1
+    with pytest.raises(LaplacianSizeError, match="would have 10 rows"):
+        complex_.get_L_top_dim_flipped(0.0)
+
+    # spectra() falls back to the guarded 1x1 B.T @ B calculation instead of
+    # attempting the larger 10x10 flipped matrix.
+    assert complex_.spectra(1, 0.0, 0.0) == pytest.approx([10.0])
 
 
 def test_flipped_does_not_affect_lower_dims():

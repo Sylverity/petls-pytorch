@@ -19,7 +19,7 @@ import torch
 class Timer:
     """Simple CPU timer."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._start: float | None = None
         self.duration: float = 0.0
 
@@ -37,7 +37,7 @@ class Timer:
 class CudaTimer:
     """GPU timer using CUDA events for accurate device-side timing."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._start_event: torch.cuda.Event | None = None
         self._end_event: torch.cuda.Event | None = None
         self.duration: float = 0.0
@@ -49,6 +49,8 @@ class CudaTimer:
 
     def stop(self) -> float:
         if self._start_event is None:
+            raise RuntimeError("CudaTimer.stop() called before start()")
+        if self._end_event is None:
             raise RuntimeError("CudaTimer.stop() called before start()")
         self._end_event.record()
         torch.cuda.synchronize()
@@ -78,10 +80,16 @@ class Profile:
     L_rows: List[int] = field(default_factory=list)
     bettis: List[int] = field(default_factory=list)
     lambdas: List[float] = field(default_factory=list)
+    zero_atol: float = 1e-8
+    zero_rtol: float = 1e-7
 
     _timer_all: Timer = field(default_factory=Timer)
     _timer_eigs: Timer = field(default_factory=Timer)
     _timer_L: Timer = field(default_factory=Timer)
+
+    def __post_init__(self) -> None:
+        if self.zero_atol < 0 or self.zero_rtol < 0:
+            raise ValueError("zero_atol and zero_rtol must be non-negative")
 
     def start_all(self) -> None:
         self._timer_all.start()
@@ -115,14 +123,15 @@ class Profile:
         self.filtration_b.append(b)
         self.L_rows.append(L_rows)
 
-        if isinstance(eigs, torch.Tensor):
-            eigs = eigs.cpu().numpy()
-        else:
-            eigs = np.array(eigs)
+        eig_array = (
+            eigs.detach().cpu().numpy() if isinstance(eigs, torch.Tensor) else np.array(eigs)
+        )
 
-        tol = 1e-4
-        betti = int(np.sum(eigs < tol))
-        nonzeros = eigs[eigs > tol]
+        spectral_scale = float(np.max(np.abs(eig_array))) if eig_array.size else 0.0
+        tol = self.zero_atol + self.zero_rtol * spectral_scale
+        absolute = np.abs(eig_array)
+        betti = int(np.sum(absolute <= tol))
+        nonzeros = absolute[absolute > tol]
         least = float(nonzeros.min()) if len(nonzeros) > 0 else 0.0
 
         self.bettis.append(betti)

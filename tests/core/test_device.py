@@ -5,7 +5,6 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-import petls_pytorch._config as config
 from petls_pytorch.core.complex import Complex
 from petls_pytorch.core.filtered_boundary import FilteredBoundaryMatrix
 from petls_pytorch.variants.alpha import Alpha
@@ -21,18 +20,14 @@ def _assert_complex_on_device(pl, device: str) -> None:
         assert fbm.range_filtrations.device == expected
 
 
-def test_complex_explicit_device_overrides_global_default(monkeypatch):
-    monkeypatch.setattr(config, "_DEFAULT_DEVICE", torch.device("meta"))
-
+def test_complex_uses_explicit_device():
     d1 = np.array([[-1]], dtype=np.float64)
     pl = Complex(boundaries=[d1], filtrations=[[0.0], [1.0]], device=torch.device("cpu"))
 
     _assert_complex_on_device(pl, "cpu")
 
 
-def test_alpha_explicit_device_overrides_global_default(monkeypatch):
-    monkeypatch.setattr(config, "_DEFAULT_DEVICE", torch.device("meta"))
-
+def test_alpha_uses_explicit_device():
     pl = Alpha(
         points=[[0.0, 0.0], [1.0, 0.0], [0.5, 1.0]],
         max_dim=1,
@@ -42,9 +37,7 @@ def test_alpha_explicit_device_overrides_global_default(monkeypatch):
     _assert_complex_on_device(pl, "cpu")
 
 
-def test_rips_explicit_device_overrides_global_default(monkeypatch):
-    monkeypatch.setattr(config, "_DEFAULT_DEVICE", torch.device("meta"))
-
+def test_rips_uses_explicit_device():
     pl = Rips(
         distances=[[0.0, 1.0], [1.0, 0.0]],
         max_dim=1,
@@ -55,9 +48,7 @@ def test_rips_explicit_device_overrides_global_default(monkeypatch):
     _assert_complex_on_device(pl, "cpu")
 
 
-def test_filtered_boundary_transpose_preserves_device(monkeypatch):
-    monkeypatch.setattr(config, "_DEFAULT_DEVICE", torch.device("meta"))
-
+def test_filtered_boundary_transpose_preserves_device():
     fbm = FilteredBoundaryMatrix(
         matrix=torch.sparse_coo_tensor(
             indices=torch.tensor([[0], [0]]),
