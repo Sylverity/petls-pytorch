@@ -24,6 +24,15 @@ def _ring_weights(count: int = 12) -> list[float]:
     return [0.10 + 0.01 * (index % 3) for index in range(count)]
 
 
+def _growing_chain_tree(count: int = 10) -> gudhi.SimplexTree:
+    tree = gudhi.SimplexTree()
+    for vertex in range(count):
+        tree.insert([vertex], filtration=0.0 if vertex < 2 else 1.0)
+    for vertex in range(count - 1):
+        tree.insert([vertex, vertex + 1], filtration=1.0)
+    return tree
+
+
 def test_weight_validation_and_finite_inputs():
     points = _ring(4)
     with pytest.raises(ValueError, match=r"len\(weights\)"):
@@ -59,11 +68,7 @@ def test_weighted_ring_has_one_tunnel_and_negative_vertex_births():
         precision="safe",
         max_alpha_square=0.0,
     )
-    assert all(
-        filtration <= 0.0
-        for values in cutoff.simplex_filtrations
-        for filtration in values
-    )
+    assert all(filtration <= 0.0 for values in cutoff.simplex_filtrations for filtration in values)
 
 
 def test_filled_tetrahedron_has_no_tunnel():
@@ -129,6 +134,20 @@ def test_persistence_intervals_and_persistent_betti_queries():
     assert persistent["betti"][1] == 1
 
 
+def test_topology_summary_defaults_follow_complex_dimension():
+    vertex_tree = gudhi.SimplexTree()
+    vertex_tree.insert([0], filtration=0.0)
+    vertex_summary = Complex(simplex_tree=vertex_tree).topology_summary()
+    assert set(vertex_summary["betti"]) == {0}
+    assert set(vertex_summary["calculation_status"]) == {0}
+
+    edge_tree = gudhi.SimplexTree()
+    edge_tree.insert([0, 1], filtration=0.0)
+    edge_summary = Complex(simplex_tree=edge_tree).topology_summary()
+    assert set(edge_summary["betti"]) == {0, 1}
+    assert set(edge_summary["calculation_status"]) == {0, 1}
+
+
 def test_simplex_coordinates_and_harmonic_features_are_traceable():
     labels = [f"point-{index}" for index in range(12)]
     alpha = Alpha(
@@ -142,9 +161,7 @@ def test_simplex_coordinates_and_harmonic_features_are_traceable():
     indices = boundary.indices()
     for edge_index, edge in enumerate(alpha.simplices_by_dimension[1]):
         incident_rows = indices[0, indices[1] == edge_index].tolist()
-        incident_vertices = {
-            alpha.simplices_by_dimension[0][row][0] for row in incident_rows
-        }
+        incident_vertices = {alpha.simplices_by_dimension[0][row][0] for row in incident_rows}
         assert incident_vertices == set(edge)
 
     harmonic = alpha.harmonic_features(dim=1, a=0.0, b=0.0)
@@ -231,6 +248,81 @@ def test_dense_guard_and_sparse_spectrum_avoid_dense_laplacian(monkeypatch):
     assert disconnected_summary["betti"][0] == 300
     assert disconnected_summary["calculation_status"][0] == "sparse_null_modes_only"
     assert disconnected_summary["least_nonzero_eigenvalue"][0] is None
+
+
+def test_persistent_guard_includes_larger_intermediate_at_b():
+    vertex_count = 10
+    boundary = np.zeros((vertex_count, vertex_count - 1), dtype=np.float64)
+    for edge in range(vertex_count - 1):
+        boundary[edge, edge] = -1.0
+        boundary[edge + 1, edge] = 1.0
+    complex_ = Complex(
+        boundaries=[boundary],
+        filtrations=[[0.0, 0.0, *([1.0] * 8)], [1.0] * 9],
+        dtype=torch.float64,
+        max_matrix_rows=5,
+    )
+
+    estimate = complex_.estimate_laplacian(dim=0, a=0.0, b=1.0)
+    assert estimate["rows"] == 2
+    assert estimate["intermediate_rows"] == 10
+    assert estimate["peak_rows"] == 10
+    assert estimate["dense_bytes"] == 2 * 2 * 8
+    assert estimate["intermediate_dense_bytes"] == 10 * 10 * 8
+    assert estimate["peak_dense_bytes"] == 10 * 10 * 8
+    assert not estimate["within_dense_limits"]
+
+    with pytest.raises(LaplacianSizeError, match="10 intermediate rows"):
+        complex_.get_L(0, 0.0, 1.0)
+
+
+@pytest.mark.parametrize(
+    ("eigenvalue_order", "count", "expected"),
+    [
+        ("LM", 2, [9.0, 16.0]),
+        ("LA", 2, [9.0, 16.0]),
+        ("SA", 2, [0.0, 1.0]),
+        ("BE", 3, [0.0, 9.0, 16.0]),
+    ],
+)
+def test_sparse_ordinary_spectrum_honors_order(
+    monkeypatch,
+    eigenvalue_order,
+    count,
+    expected,
+):
+    import scipy.sparse
+
+    complex_ = Complex(boundaries=[], filtrations=[[0.0] * 5])
+    diagonal = scipy.sparse.diags([0.0, 1.0, 4.0, 9.0, 16.0], format="csr")
+    monkeypatch.setattr(complex_, "get_L_sparse", lambda dim, scale: diagonal)
+    complex_.set_eigs_algorithm(
+        "sparse",
+        num_eigenvalues=count,
+        eigenvalue_order=eigenvalue_order,
+    )
+
+    assert complex_.ordinary_spectrum(0, 0.0, count) == expected
+
+
+def test_oversized_harmonic_features_have_explicit_ordinary_and_persistent_behavior():
+    isolated_tree = gudhi.SimplexTree()
+    for vertex in range(20):
+        isolated_tree.insert([vertex], filtration=0.0)
+    disconnected = Complex(simplex_tree=isolated_tree, max_matrix_rows=5)
+
+    ordinary = disconnected.harmonic_features(dim=0, a=0.0)
+    assert ordinary["calculation_status"] == "truncated_for_scale"
+    assert ordinary["betti"] == 20
+    assert ordinary["returned_features"] == 10
+    assert not ordinary["features_complete"]
+
+    growing = Complex(simplex_tree=_growing_chain_tree(), max_matrix_rows=5)
+    with pytest.raises(
+        LaplacianSizeError,
+        match="sparse oversized path only for ordinary",
+    ):
+        growing.harmonic_features(dim=0, a=0.0, b=1.0)
 
 
 def test_object_specific_dtype_device_and_small_weighted_parity():

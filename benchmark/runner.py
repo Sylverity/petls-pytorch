@@ -298,11 +298,13 @@ class BenchmarkRunner:
         from .datasets import generate_dataset
 
         package = (self.package if package is None else package).lower()
+        reported_dtype = self.dtype if package == "petls-pytorch" else "native"
         self._prepare_backend(package)
 
         self._print(
             f"\n[Benchmark] #{config_index} {dataset_name} | n={n_points} | {complex_type} | "
-            f"max_dim={max_dim} | package={package} | device={self.device} | dtype={self.dtype}"
+            f"max_dim={max_dim} | package={package} | device={self.device} | "
+            f"dtype={reported_dtype}"
         )
         self._print("-" * 60)
 
@@ -371,7 +373,7 @@ class BenchmarkRunner:
                     matrix_rows=rows_estimate,
                     algorithm=self.algorithm,
                     device=self.device,
-                    dtype=self.dtype,
+                    dtype=reported_dtype,
                     seed=seed,
                     config_index=config_index,
                     request_index=request_index,
@@ -415,7 +417,7 @@ class BenchmarkRunner:
                     total_time_ms=t_build,
                     algorithm=self.algorithm,
                     device=self.device,
-                    dtype=self.dtype,
+                    dtype=reported_dtype,
                     seed=seed,
                     config_index=config_index,
                     request_index=request_index,
@@ -468,7 +470,7 @@ class BenchmarkRunner:
                 least_nonzero=float(lam),
                 algorithm=self.algorithm,
                 device=self.device,
-                dtype=self.dtype,
+                dtype=reported_dtype,
                 seed=seed,
                 config_index=config_index,
                 request_index=request_index,

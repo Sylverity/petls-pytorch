@@ -9,6 +9,47 @@ import numpy as np
 import torch
 
 _CUDA_CPU_FALLBACK_ROWS = 512
+EIGENVALUE_ORDERS = {"SM", "SA", "LM", "LA", "BE"}
+
+
+def eigenvalue_indices(values: np.ndarray, count: int, which: str) -> np.ndarray:
+    """Return indices selected and ordered using SciPy ``eigsh`` semantics."""
+    if which not in EIGENVALUE_ORDERS:
+        raise ValueError("which must be one of 'SM', 'SA', 'LM', 'LA', or 'BE'")
+    count = min(count, len(values))
+    if count < 1:
+        return np.empty(0, dtype=np.int64)
+
+    algebraic = np.argsort(values, kind="stable")
+    if count == len(values):
+        selected = algebraic
+    elif which == "SA":
+        selected = algebraic[:count]
+    elif which == "LA":
+        selected = algebraic[-count:]
+    elif which == "SM":
+        selected = np.argsort(np.abs(values), kind="stable")[:count]
+    elif which == "LM":
+        selected = np.argsort(np.abs(values), kind="stable")[-count:]
+    else:
+        lower_count = count // 2
+        upper_count = count - lower_count
+        selected = np.concatenate((algebraic[:lower_count], algebraic[-upper_count:]))
+
+    selected = selected[np.argsort(values[selected], kind="stable")]
+    return selected
+
+
+def select_eigenpairs(
+    values: np.ndarray,
+    vectors: np.ndarray | None,
+    count: int,
+    which: str,
+) -> tuple[np.ndarray, np.ndarray | None]:
+    """Select and ascending-sort eigenpairs using SciPy ``eigsh`` semantics."""
+    selected = eigenvalue_indices(values, count, which)
+    selected_vectors = None if vectors is None else vectors[:, selected]
+    return values[selected], selected_vectors
 
 
 def _full_eigenvalues(matrix: torch.Tensor) -> torch.Tensor:
@@ -95,7 +136,7 @@ def solve_sparse_eigenvalues(
 
     if num_eigenvalues < 1:
         raise ValueError("num_eigenvalues must be positive")
-    if which not in {"SM", "SA", "LM", "LA", "BE"}:
+    if which not in EIGENVALUE_ORDERS:
         raise ValueError("which must be one of 'SM', 'SA', 'LM', 'LA', or 'BE'")
     if matrix.numel() == 0:
         return torch.empty(0, device=matrix.device, dtype=matrix.dtype)
@@ -108,22 +149,14 @@ def solve_sparse_eigenvalues(
     if complete:
         values = scipy.linalg.eigvalsh(dense)
     elif diagonal:
-        values = np.sort(np.diag(dense))
+        values = np.diag(dense).copy()
     else:
+        solver_which = "LA" if which == "BE" and requested == 1 else which
         values = scipy.sparse.linalg.eigsh(
             dense,
             k=requested,
-            which=which,
+            which=solver_which,
             return_eigenvectors=False,
         )
-        values.sort()
-
-    if len(values) > requested:
-        if which in {"SM", "SA"}:
-            values = values[:requested]
-        elif which in {"LM", "LA"}:
-            values = values[-requested:]
-        else:
-            lower = requested // 2
-            values = np.concatenate((values[:lower], values[-(requested - lower) :]))
+    values, _ = select_eigenpairs(values, None, requested, which)
     return torch.as_tensor(values, dtype=matrix.dtype, device=matrix.device)

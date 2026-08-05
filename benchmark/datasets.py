@@ -157,6 +157,7 @@ def generate_dataset(
     package = package.lower()
     if dtype not in {"float32", "float64"}:
         raise ValueError("dtype must be 'float32' or 'float64'")
+    reported_dtype = dtype if package == "petls-pytorch" else "native"
     backend_kwargs = {}
     if package == "petls":
         import petls
@@ -170,7 +171,7 @@ def generate_dataset(
         Rips = petls_pytorch.Rips
         backend_kwargs = {
             "device": "cpu" if device is None else device,
-            "dtype": dtype,
+            "dtype": reported_dtype,
         }
     else:
         raise ValueError(f"package must be 'petls' or 'petls-pytorch', got {package}")
@@ -242,7 +243,7 @@ def generate_dataset(
             "filtration_mode": filtration_mode,
             "package": package,
             "device": "cpu" if device is None else device,
-            "dtype": dtype,
+            "dtype": reported_dtype,
             "compute_matrix_stats": compute_matrix_stats,
             "rips_threshold_quantile": rips_threshold_quantile,
             **DATASET_REGISTRY[name]["params"],

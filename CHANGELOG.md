@@ -51,6 +51,12 @@
 
 - Corrected weighted zero-dimensional filtration bookkeeping throughout
   Laplacian construction and filtration enumeration.
+- Guarded the peak Schur-complement intermediate at filtration `b`, not only
+  the final persistent-Laplacian output at filtration `a`.
+- Made default topology summaries dimension-aware and honored every supported
+  sparse eigenvalue-order selection.
+- Clarified oversized harmonic localization behavior and corrected original
+  PETLS benchmark dtype metadata to report `native`.
 - Aligned profiling summaries with object-specific, scale-aware zero
   tolerances.
 - Ensured benchmark Alpha complexes honor requested device and dtype settings.

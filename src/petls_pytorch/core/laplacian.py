@@ -243,11 +243,15 @@ def get_L(
       dim == top_dim → L = L_down only
       dim > top_dim  → empty matrix
     """
-    target_device = device if device is not None else (
-        filtered_boundaries[0].device if filtered_boundaries else DEFAULT_DEVICE
+    target_device = (
+        device
+        if device is not None
+        else (filtered_boundaries[0].device if filtered_boundaries else DEFAULT_DEVICE)
     )
-    dtype = dtype if dtype is not None else (
-        filtered_boundaries[0].matrix.dtype if filtered_boundaries else DEFAULT_DTYPE
+    dtype = (
+        dtype
+        if dtype is not None
+        else (filtered_boundaries[0].matrix.dtype if filtered_boundaries else DEFAULT_DTYPE)
     )
     l_rows = _laplacian_rows(dim, a, filtered_boundaries, top_dim)
 

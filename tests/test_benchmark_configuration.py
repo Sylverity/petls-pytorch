@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import sys
+from types import SimpleNamespace
+
 import pytest
 import torch
 
@@ -55,3 +58,57 @@ def test_benchmark_dtype_validation(tmp_path):
 
 def test_benchmark_csv_schema_records_dtype():
     assert "dtype" in BenchmarkRunner._result_fieldnames()
+
+
+def test_reference_petls_reports_native_dtype_for_metadata_and_skipped_rows(
+    monkeypatch,
+    tmp_path,
+):
+    class FakeBoundary:
+        def index_of_filtration(self, use_domain, scale):
+            return 0
+
+    class FakeReferenceComplex:
+        top_dim = 1
+        filtered_boundaries = [FakeBoundary(), FakeBoundary()]
+
+        def __init__(self, **kwargs):
+            pass
+
+        def get_all_filtrations(self):
+            return [0.0, 1.0]
+
+        def set_eigs_Algorithm(self, algorithm):
+            pass
+
+    fake_petls = SimpleNamespace(Alpha=FakeReferenceComplex, Rips=FakeReferenceComplex)
+    monkeypatch.setitem(sys.modules, "petls", fake_petls)
+
+    data = generate_dataset(
+        name="sphere",
+        n_points=4,
+        max_dim=0,
+        num_filtrations=2,
+        package="petls",
+        dtype="float64",
+    )
+    assert data["metadata"]["dtype"] == "native"
+
+    runner = BenchmarkRunner(
+        output_dir=str(tmp_path),
+        package="petls",
+        dtype="float64",
+        max_matrix_rows=0,
+        verbose=False,
+    )
+    results = runner.run_trial(
+        dataset_name="sphere",
+        n_points=4,
+        max_dim=0,
+        num_filtrations=2,
+        dims=[0],
+        include_final_request=False,
+    )
+    assert len(results) == 1
+    assert results[0].skipped
+    assert results[0].dtype == "native"

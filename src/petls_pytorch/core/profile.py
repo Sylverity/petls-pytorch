@@ -123,7 +123,9 @@ class Profile:
         self.filtration_b.append(b)
         self.L_rows.append(L_rows)
 
-        eig_array = eigs.detach().cpu().numpy() if isinstance(eigs, torch.Tensor) else np.array(eigs)
+        eig_array = (
+            eigs.detach().cpu().numpy() if isinstance(eigs, torch.Tensor) else np.array(eigs)
+        )
 
         spectral_scale = float(np.max(np.abs(eig_array))) if eig_array.size else 0.0
         tol = self.zero_atol + self.zero_rtol * spectral_scale

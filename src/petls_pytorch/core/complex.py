@@ -103,8 +103,7 @@ class Complex:
             self.simplices_by_dimension = simplices
             self.simplex_filtrations = [list(values) for values in extracted_filtrations]
             self.simplex_to_index = [
-                {simplex: index for index, simplex in enumerate(values)}
-                for values in simplices
+                {simplex: index for index, simplex in enumerate(values)} for values in simplices
             ]
 
         if boundaries is not None and filtrations is not None:
@@ -156,9 +155,7 @@ class Complex:
         # d_0 placeholder aligns indexing with the original PETLS Complex, but
         # its metadata must contain every actual vertex birth (including
         # negative power-filtration values).
-        vertex_filtrations = torch.tensor(
-            filtrations[0], device=self.device, dtype=torch.float64
-        )
+        vertex_filtrations = torch.tensor(filtrations[0], device=self.device, dtype=torch.float64)
         n_vertices = len(vertex_filtrations)
         with torch.sparse.check_sparse_tensor_invariants():
             dummy_mat = torch.sparse_coo_tensor(
@@ -244,9 +241,7 @@ class Complex:
         if num_eigenvalues < 1:
             raise ValueError("num_eigenvalues must be positive")
         if eigenvalue_order not in {"SM", "SA", "LM", "LA", "BE"}:
-            raise ValueError(
-                "eigenvalue_order must be one of 'SM', 'SA', 'LM', 'LA', or 'BE'"
-            )
+            raise ValueError("eigenvalue_order must be one of 'SM', 'SA', 'LM', 'LA', or 'BE'")
         self._eigs_algorithm = algorithm
         self._num_eigenvalues = num_eigenvalues
         self._eigenvalue_order = eigenvalue_order
@@ -263,15 +258,25 @@ class Complex:
         return self.filtered_boundaries[dim].index_of_filtration(True, scale) + 1
 
     def estimate_laplacian(self, dim: int, a: float, b: float | None = None) -> dict[str, Any]:
-        """Estimate dense Laplacian cost without constructing the matrix."""
+        """Estimate final and peak-intermediate dense Laplacian allocations."""
         b = a if b is None else b
         if b < a:
             raise ValueError("b must be greater than or equal to a")
         rows = self._laplacian_rows(dim, a)
+        intermediate_rows = rows
+        if dim < self.top_dim:
+            coboundary = self.filtered_boundaries[dim + 1]
+            if coboundary.index_of_filtration(True, b) >= 0:
+                intermediate_rows = coboundary.index_of_filtration(False, b) + 1
+        peak_rows = max(rows, intermediate_rows)
         element_size = torch.empty((), dtype=self.dtype).element_size()
         dense_bytes = rows * rows * element_size
-        exceeds_rows = self.max_matrix_rows is not None and rows > self.max_matrix_rows
-        exceeds_bytes = self.max_matrix_bytes is not None and dense_bytes > self.max_matrix_bytes
+        intermediate_dense_bytes = intermediate_rows * intermediate_rows * element_size
+        peak_dense_bytes = max(dense_bytes, intermediate_dense_bytes)
+        exceeds_rows = self.max_matrix_rows is not None and peak_rows > self.max_matrix_rows
+        exceeds_bytes = (
+            self.max_matrix_bytes is not None and peak_dense_bytes > self.max_matrix_bytes
+        )
         within_dense_limits = not (exceeds_rows or exceeds_bytes)
         if within_dense_limits:
             backend = "dense"
@@ -284,8 +289,12 @@ class Complex:
             "filtration_a": float(a),
             "filtration_b": float(b),
             "rows": rows,
+            "intermediate_rows": intermediate_rows,
+            "peak_rows": peak_rows,
             "dtype": str(self.dtype).removeprefix("torch."),
             "dense_bytes": dense_bytes,
+            "intermediate_dense_bytes": intermediate_dense_bytes,
+            "peak_dense_bytes": peak_dense_bytes,
             "within_dense_limits": within_dense_limits,
             "exceeds_max_matrix_rows": exceeds_rows,
             "exceeds_max_matrix_bytes": exceeds_bytes,
@@ -297,10 +306,12 @@ class Complex:
         if estimate["within_dense_limits"]:
             return
         message = (
-            f"Dense L_{dim}({a}, {b}) would have {estimate['rows']} rows and require "
-            f"approximately {estimate['dense_bytes']} bytes, exceeding this object's "
-            "matrix guard. Use an ordinary sparse spectrum at a == b, raise the limits "
-            "explicitly, or use topology_summary(..., on_oversize='homology_only')."
+            f"Dense L_{dim}({a}, {b}) would have {estimate['rows']} output rows, "
+            f"require up to {estimate['intermediate_rows']} intermediate rows, and allocate "
+            f"approximately {estimate['peak_dense_bytes']} bytes for its largest dense "
+            "matrix, exceeding this object's matrix guard. Use an ordinary sparse spectrum "
+            "at a == b, raise the limits explicitly, or use "
+            "topology_summary(..., on_oversize='homology_only')."
         )
         raise LaplacianSizeError(message)
 
@@ -325,7 +336,9 @@ class Complex:
         import scipy.sparse
 
         rows = self._laplacian_rows(dim, scale)
-        result = scipy.sparse.csr_matrix((rows, rows), dtype=np.dtype(str(self.dtype).split(".")[-1]))
+        result = scipy.sparse.csr_matrix(
+            (rows, rows), dtype=np.dtype(str(self.dtype).split(".")[-1])
+        )
         if rows == 0 or dim > self.top_dim:
             return result
         if dim > 0:
@@ -345,7 +358,14 @@ class Complex:
         num_eigenvalues: int | None = None,
         return_eigenvectors: bool = False,
         augment_for_betti: bool = True,
+        eigenvalue_order: str | None = None,
     ):
+        from petls_pytorch.core.eigenvalues import (
+            EIGENVALUE_ORDERS,
+            eigenvalue_indices,
+            select_eigenpairs,
+        )
+
         import scipy.sparse.linalg
 
         laplacian = self.get_L_sparse(dim, scale)
@@ -358,37 +378,52 @@ class Complex:
         requested = self._num_eigenvalues if num_eigenvalues is None else int(num_eigenvalues)
         if requested < 1:
             raise ValueError("num_eigenvalues must be positive")
+        which = self._eigenvalue_order if eigenvalue_order is None else eigenvalue_order
+        if which not in EIGENVALUE_ORDERS:
+            raise ValueError("eigenvalue_order must be one of 'SM', 'SA', 'LM', 'LA', or 'BE'")
         known_betti = self._gudhi_betti_at(dim, scale)
         # A few eigenvalues beyond a known nullity usually expose the gap. Do
         # not let a very large Betti number silently turn a lowest-spectrum
         # query into an almost-complete eigendecomposition.
-        if augment_for_betti and known_betti is not None and known_betti < rows:
+        if (
+            augment_for_betti
+            and which in {"SM", "SA"}
+            and known_betti is not None
+            and known_betti < rows
+        ):
             requested = max(requested, min(known_betti + 3, 256))
         requested = min(requested, rows)
 
         if laplacian.nnz == 0:
-            values = np.zeros(requested, dtype=np.float64)
-            vectors = np.eye(rows, requested, dtype=np.float64)
+            values = np.zeros(rows, dtype=np.float64)
+            selected = eigenvalue_indices(values, requested, which)
+            vectors = np.zeros((rows, len(selected)), dtype=np.float64)
+            vectors[selected, np.arange(len(selected))] = 1.0
+            values = values[selected]
+        elif np.count_nonzero(laplacian.diagonal()) == laplacian.nnz:
+            values = np.asarray(laplacian.diagonal(), dtype=np.float64)
+            selected = eigenvalue_indices(values, requested, which)
+            vectors = np.zeros((rows, len(selected)), dtype=np.float64)
+            vectors[selected, np.arange(len(selected))] = 1.0
+            values = values[selected]
         elif rows <= 256 and requested == rows:
             # Complete output is dense by definition, but this fallback is
             # deliberately limited to small matrices.
             dense = laplacian.toarray()
             values, vectors = np.linalg.eigh(dense)
-            values = values[:requested]
-            vectors = vectors[:, :requested]
         else:
             requested = min(requested, rows - 1)
+            solver_which = "LA" if which == "BE" and requested == 1 else which
             values, vectors = scipy.sparse.linalg.eigsh(
                 laplacian,
                 k=requested,
-                which="SM",
+                which=solver_which,
                 return_eigenvectors=True,
             )
-            order = np.argsort(values)
-            values = values[order]
-            vectors = vectors[:, order]
+        values, selected_vectors = select_eigenpairs(values, vectors, requested, which)
+        assert selected_vectors is not None
         if return_eigenvectors:
-            return values, vectors
+            return values, selected_vectors
         return values
 
     def ordinary_spectrum(
@@ -396,9 +431,15 @@ class Complex:
         dim: int,
         scale: float,
         num_eigenvalues: int | None = None,
+        eigenvalue_order: str | None = None,
     ) -> list[float]:
-        """Return the lowest ordinary Hodge eigenvalues via a sparse path."""
-        values = self._sparse_ordinary_eigenpairs(dim, scale, num_eigenvalues)
+        """Return a selected ordinary Hodge spectrum via a sparse path."""
+        values = self._sparse_ordinary_eigenpairs(
+            dim,
+            scale,
+            num_eigenvalues,
+            eigenvalue_order=eigenvalue_order,
+        )
         return cast(list[float], np.asarray(values, dtype=np.float64).tolist())
 
     def get_L(self, dim: int, a: float, b: float) -> torch.Tensor:
@@ -722,16 +763,11 @@ class Complex:
         intervals = self.persistence_intervals(dim)
         if intervals.size == 0:
             return 0
-        return int(
-            np.sum((intervals[:, 0] <= birth_scale) & (intervals[:, 1] > death_scale))
-        )
+        return int(np.sum((intervals[:, 0] <= birth_scale) & (intervals[:, 1] > death_scale)))
 
     def betti_numbers_at(self, scale: float) -> dict[int, int]:
         """Return authoritative Gudhi Betti numbers for the sublevel complex."""
-        return {
-            dim: self.persistent_betti(dim, scale, scale)
-            for dim in range(self.top_dim + 1)
-        }
+        return {dim: self.persistent_betti(dim, scale, scale) for dim in range(self.top_dim + 1)}
 
     def _gudhi_betti_at(self, dim: int, scale: float) -> int | None:
         if self.simplex_tree is None:
@@ -740,7 +776,7 @@ class Complex:
 
     def topology_summary(
         self,
-        dimensions: Sequence[int] = (0, 1, 2),
+        dimensions: Sequence[int] | None = None,
         a: float = 0.0,
         b: float = 0.0,
         on_oversize: str | None = None,
@@ -759,6 +795,8 @@ class Complex:
             raise ValueError("on_oversize must be 'raise' or 'homology_only'")
         if smallest_eigenvalues < 0:
             raise ValueError("smallest_eigenvalues must be non-negative")
+        if dimensions is None:
+            dimensions = range(self.top_dim + 1)
 
         betti: dict[int, int] = {}
         spectral_nullity: dict[int, int | None] = {}
@@ -801,7 +839,7 @@ class Complex:
                 if a == b and (
                     not estimate["within_dense_limits"] or self._eigs_algorithm == "sparse"
                 ):
-                    eigenvalues = self.ordinary_spectrum(dim, a)
+                    eigenvalues = self.ordinary_spectrum(dim, a, eigenvalue_order="SM")
                     statuses[dim] = "sparse_lowest_spectrum"
                 else:
                     eigenvalues = self.spectra(dim, a, b)
@@ -821,8 +859,7 @@ class Complex:
             tolerance = self._zero_tolerance(values)
             spectral_nullity[dim] = nullity
             if statuses[dim] == "sparse_lowest_spectrum" and (
-                least == 0.0
-                or (authoritative is not None and authoritative >= len(values))
+                least == 0.0 or (authoritative is not None and authoritative >= len(values))
             ):
                 least_nonzero[dim] = None
                 statuses[dim] = "sparse_null_modes_only"
@@ -871,10 +908,15 @@ class Complex:
         if max_features is not None and max_features < 1:
             raise ValueError("max_features must be positive or None")
 
-        authoritative = (
-            self.persistent_betti(dim, a, b) if self.simplex_tree is not None else None
-        )
+        authoritative = self.persistent_betti(dim, a, b) if self.simplex_tree is not None else None
         estimate = self.estimate_laplacian(dim, a, b)
+        if a < b and not estimate["within_dense_limits"]:
+            raise LaplacianSizeError(
+                "Persistent harmonic localization requires a dense Schur-complement "
+                "Laplacian, and this request exceeds the matrix guard. Harmonic "
+                "localization has a sparse oversized path only for ordinary a == b "
+                "calculations."
+            )
         feature_target = authoritative
         calculation_status = "complete"
         if authoritative is not None and max_features is not None:
@@ -891,6 +933,7 @@ class Complex:
                 requested,
                 return_eigenvectors=True,
                 augment_for_betti=False,
+                eigenvalue_order="SM",
             )
         else:
             values, vectors = self.eigenpairs(dim, a, b)

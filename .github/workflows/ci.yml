@@ -41,3 +41,14 @@ jobs:
 
       - name: Run tests
         run: python -m pytest
+
+      - name: Check formatting
+        if: matrix.python-version == '3.13'
+        run: python -m ruff format --check .
+
+      - name: Run lint
+        if: matrix.python-version == '3.13'
+        run: python -m ruff check .
+
+      - name: Run mypy
+        run: python -m mypy src/petls_pytorch benchmark

@@ -176,10 +176,12 @@ for numerical auditing.
 
 `harmonic_features()` returns each numerical zero-mode eigenvector as
 simplex/coefficient records. Harmonic bases need not be unique, but their
-coordinates always follow the retained simplex order. On an oversized complex,
-the method caps automatic localization at ten representatives and reports
-`truncated_for_scale`; pass `max_features=` to request a different explicit
-limit.
+coordinates always follow the retained simplex order. For oversized ordinary
+calculations (`a == b`), the sparse path caps automatic localization at ten
+representatives and reports `truncated_for_scale`; pass `max_features=` to
+request a different explicit limit. Persistent localization (`a < b`) requires
+the dense Schur-complement Laplacian and raises `LaplacianSizeError` when either
+its output or peak intermediate allocation exceeds the configured guard.
 
 ## Precision, Devices, and Scaling
 
@@ -194,8 +196,10 @@ Zero eigenvalues use the scale-aware test
 report the effective tolerance and smallest eigenvalues so borderline modes can
 be inspected.
 
-Dense allocations are guarded before construction. The defaults are 12,000
-rows and 4 GB per Laplacian, and both are configurable per object:
+Dense allocations are guarded before construction. Estimates report the final
+matrix at filtration `a` and the larger Schur-complement intermediate that may
+be required at filtration `b`. The defaults are 12,000 rows and 4 GB for the
+largest dense matrix in the calculation, and both are configurable per object:
 
 ```python
 estimate = alpha.estimate_laplacian(dim=1, a=0.0, b=0.0)
@@ -212,11 +216,13 @@ guarded = petls_pytorch.Alpha(
 `ordinary_spectrum(dim, scale, num_eigenvalues)` builds sparse boundary Gram
 matrices and calls SciPy's sparse symmetric eigensolver without first creating
 a dense Laplacian. The same path is used by `spectra()` for `a == b` after
-`set_eigs_algorithm("sparse", ...)`. Persistent Schur complements can become
-dense, so oversized `a < b` requests either raise `LaplacianSizeError` or return
-Gudhi homology-only status through `topology_summary()`. This distinction is
-intentional: large systems retain authoritative homology and ordinary sparse
-Hodge spectra without pretending that full persistent spectra are sparse.
+`set_eigs_algorithm("sparse", ..., eigenvalue_order="SM")`; `SM`, `SA`, `LM`,
+`LA`, and `BE` selection is honored consistently. Persistent Schur complements
+can become dense, so oversized `a < b` requests either raise
+`LaplacianSizeError` or return Gudhi homology-only status through
+`topology_summary()`. This distinction is intentional: large systems retain
+authoritative homology and ordinary sparse Hodge spectra without pretending
+that full persistent spectra are sparse.
 
 ## Relationship to PETLS
 
@@ -331,7 +337,9 @@ uv run --extra benchmark python -m benchmark \
 Benchmark device and dtype are passed directly to each PETLS-PyTorch object and
 recorded in CSV output. The benchmark CLI defaults to `float32` to preserve the
 historical comparison workload; pass `--dtype float64` to benchmark the
-higher-precision weighted-Alpha default used by the scientific API.
+higher-precision weighted-Alpha default used by the scientific API. Original
+PETLS does not expose the PyTorch dtype selection, so its result rows and
+dataset metadata report `dtype="native"`.
 
 By default, benchmark files are written under `benchmark-results/results`. Use
 `--output_dir benchmark-results/<run-name>` to keep named runs together.
@@ -358,6 +366,15 @@ dependencies:
 
 ```bash
 uv run --extra dev pytest tests/ -v
+```
+
+Run the same release-quality checks used by CI from the active supported Python
+environment:
+
+```bash
+uv run --extra dev ruff format --check .
+uv run --extra dev ruff check .
+uv run --extra dev mypy src/petls_pytorch benchmark
 ```
 
 By default, tests that compare against the original PETLS package are skipped
