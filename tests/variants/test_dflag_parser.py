@@ -10,8 +10,8 @@ from petls_pytorch.variants.dflag import _enumerate_directed_simplices, _read_fl
 
 def _bruteforce_directed_simplices(adj: np.ndarray, max_dim: int):
     n = adj.shape[0]
-    simplices = [[] for _ in range(max_dim + 1)]
-    filtrations = [[] for _ in range(max_dim + 1)]
+    simplices: list[list[tuple[int, ...]]] = [[] for _ in range(max_dim + 1)]
+    filtrations: list[list[float]] = [[] for _ in range(max_dim + 1)]
 
     for v in range(n):
         simplices[0].append((v,))
@@ -19,12 +19,12 @@ def _bruteforce_directed_simplices(adj: np.ndarray, max_dim: int):
 
     for dim in range(1, max_dim + 1):
         for code in range(n ** (dim + 1)):
-            tup = []
+            tup_list = []
             tmp = code
             for _ in range(dim + 1):
-                tup.append(tmp % n)
+                tup_list.append(tmp % n)
                 tmp //= n
-            tup = tuple(tup)
+            tup = tuple(tup_list)
             if len(set(tup)) != dim + 1:
                 continue
 

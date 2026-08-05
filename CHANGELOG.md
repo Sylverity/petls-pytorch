@@ -35,6 +35,13 @@
 - Dense persistent spectra are bounded by configurable row and byte limits;
   oversized summaries can retain Gudhi homology with explicit
   `homology_only` status.
+- Benchmark runs now pass device and dtype directly to each object, record the
+  dtype in result rows, and expose `--dtype {float32,float64}`. The benchmark
+  default remains `float32` for continuity with published comparisons.
+- `Profile.wrap_up()` now uses the same configurable, scale-aware eigenvalue
+  zero tolerance as `Complex` summaries.
+- Completed static typing cleanup while retaining Python 3.10 as the mypy
+  analysis target and minimum supported runtime.
 - Made benchmark timing fairer and more explicit: package import/device warmup
   is excluded from complex-build timing, CUDA runs synchronize around timed
   regions, and PETLS/PETLS-PyTorch eigensolve timing now solves an already-built

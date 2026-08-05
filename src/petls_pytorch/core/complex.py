@@ -78,7 +78,7 @@ class Complex:
 
         self.top_dim: int = 0
         self.filtered_boundaries: List[FilteredBoundaryMatrix] = []
-        self.profile = Profile()
+        self.profile = Profile(zero_atol=self.zero_atol, zero_rtol=self.zero_rtol)
         self.simplex_tree = simplex_tree
         self.simplices_by_dimension: list[list[tuple[int, ...]]] = []
         self.simplex_filtrations: list[list[float]] = []

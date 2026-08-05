@@ -281,7 +281,7 @@ when benchmarking against the original PETLS package.
 ```bash
 # Representative CPU/GPU comparison
 uv run python -m benchmark --preset standard --package petls-pytorch --algorithm eigvalsh --device cpu
-uv run python -m benchmark --preset standard --package petls-pytorch --algorithm eigvalsh --device cuda
+uv run python -m benchmark --preset standard --package petls-pytorch --algorithm eigvalsh --device cuda --dtype float32
 
 # Reference PETLS, if installed for your platform
 uv run --with petls python -m benchmark --preset standard --package petls --algorithm selfadjoint
@@ -292,9 +292,14 @@ uv run python -m benchmark --preset stress --package petls-pytorch --algorithm e
 # Custom single run
 uv run python -m benchmark \
     --dataset torus --n_points 2000 --complex alpha --max_dim 3 \
-    --package petls-pytorch --algorithm eigvalsh --device cuda \
+    --package petls-pytorch --algorithm eigvalsh --device cuda --dtype float32 \
     --max_matrix_rows 12000
 ```
+
+Benchmark device and dtype are passed directly to each PETLS-PyTorch object and
+recorded in CSV output. The benchmark CLI defaults to `float32` to preserve the
+historical comparison workload; pass `--dtype float64` to benchmark the
+higher-precision weighted-Alpha default used by the scientific API.
 
 By default, benchmark files are written under `benchmark-results/results`. Use
 `--output_dir benchmark-results/<run-name>` to keep named runs together.

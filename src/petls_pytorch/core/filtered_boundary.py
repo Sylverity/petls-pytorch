@@ -13,6 +13,7 @@ Key design decisions:
 from __future__ import annotations
 
 import torch
+from typing import cast
 
 from petls_pytorch._config import get_device
 
@@ -191,9 +192,13 @@ class FilteredBoundaryMatrix:
             import numpy as np
 
             rows_np = row_pairs[:n_cols].numpy()
-            values_np = value_pairs[:n_cols].numpy().astype(
-                np.float64 if dtype == torch.float64 else np.float32,
-                copy=False,
+            values_np = (
+                value_pairs[:n_cols]
+                .numpy()
+                .astype(
+                    np.float64 if dtype == torch.float64 else np.float32,
+                    copy=False,
+                )
             )
             valid = (rows_np[:, 0] < n_rows) & (rows_np[:, 1] < n_rows)
             rows_np = rows_np[valid]
@@ -201,44 +206,44 @@ class FilteredBoundaryMatrix:
 
             L_np = np.zeros((n_rows, n_rows), dtype=values_np.dtype)
             if rows_np.size:
-                r0 = rows_np[:, 0]
-                r1 = rows_np[:, 1]
-                v0 = values_np[:, 0]
-                v1 = values_np[:, 1]
-                np.add.at(L_np, (r0, r0), v0 * v0)
-                np.add.at(L_np, (r1, r1), v1 * v1)
-                offdiag = v0 * v1
-                np.add.at(L_np, (r0, r1), offdiag)
-                np.add.at(L_np, (r1, r0), offdiag)
+                np_r0 = rows_np[:, 0]
+                np_r1 = rows_np[:, 1]
+                np_v0 = values_np[:, 0]
+                np_v1 = values_np[:, 1]
+                np.add.at(L_np, (np_r0, np_r0), np.multiply(np_v0, np_v0))
+                np.add.at(L_np, (np_r1, np_r1), np.multiply(np_v1, np_v1))
+                np_offdiag = np.multiply(np_v0, np_v1)
+                np.add.at(L_np, (np_r0, np_r1), np_offdiag)
+                np.add.at(L_np, (np_r1, np_r0), np_offdiag)
             return torch.from_numpy(L_np)
 
-        rows = row_pairs[:n_cols].to(device=target_device)
-        values = value_pairs[:n_cols].to(device=target_device, dtype=dtype)
-        valid = (rows[:, 0] < n_rows) & (rows[:, 1] < n_rows)
-        if not bool(torch.all(valid)):
-            rows = rows[valid]
-            values = values[valid]
+        rows_t = row_pairs[:n_cols].to(device=target_device)
+        values_t = value_pairs[:n_cols].to(device=target_device, dtype=dtype)
+        valid_t = (rows_t[:, 0] < n_rows) & (rows_t[:, 1] < n_rows)
+        if not bool(torch.all(valid_t)):
+            rows_t = rows_t[valid_t]
+            values_t = values_t[valid_t]
 
         L = torch.zeros(n_rows, n_rows, dtype=dtype, device=target_device)
-        if rows.numel() == 0:
+        if rows_t.numel() == 0:
             return L
 
-        r0 = rows[:, 0]
-        r1 = rows[:, 1]
-        v0 = values[:, 0]
-        v1 = values[:, 1]
+        r0 = rows_t[:, 0]
+        r1 = rows_t[:, 1]
+        v0 = values_t[:, 0]
+        v1 = values_t[:, 1]
         L.index_put_((r0, r0), v0 * v0, accumulate=True)
         L.index_put_((r1, r1), v1 * v1, accumulate=True)
-        offdiag = v0 * v1
-        L.index_put_((r0, r1), offdiag, accumulate=True)
-        L.index_put_((r1, r0), offdiag, accumulate=True)
+        offdiag_t = v0 * v1
+        L.index_put_((r0, r1), offdiag_t, accumulate=True)
+        L.index_put_((r1, r0), offdiag_t, accumulate=True)
         return L
 
     def _get_incidence_data(self) -> tuple[torch.Tensor, torch.Tensor] | None:
         if self._incidence_data is False:
             return None
         if self._incidence_data is not None:
-            return self._incidence_data
+            return cast(tuple[torch.Tensor, torch.Tensor], self._incidence_data)
 
         if self.num_cols == 0:
             empty_rows = torch.empty((0, 2), dtype=torch.long, device=self.device)

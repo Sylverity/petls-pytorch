@@ -270,6 +270,12 @@ Examples:
         help="Device label for result tracking (cpu, cuda, etc.)",
     )
     parser.add_argument(
+        "--dtype",
+        choices=["float32", "float64"],
+        default="float32",
+        help="PyTorch benchmark dtype (default: float32)",
+    )
+    parser.add_argument(
         "--max_matrix_rows",
         type=int,
         default=None,
@@ -296,6 +302,7 @@ Examples:
         package=args.package,
         verbose=True,
         max_matrix_rows=args.max_matrix_rows,
+        dtype=args.dtype,
     )
 
     if args.preset:
@@ -305,6 +312,7 @@ Examples:
         print(f"# Package:        {args.package}")
         print(f"# Algorithm:      {args.algorithm}")
         print(f"# Device:         {args.device if args.package == 'petls-pytorch' else 'cpu'}")
+        print(f"# Dtype:          {args.dtype if args.package == 'petls-pytorch' else 'native'}")
         print(f"# Output:         {args.output_dir}")
         print(f"{'#' * 60}\n")
         runner.run_suite(name=f"{args.package}_{preset['name']}", configs=preset["configs"])

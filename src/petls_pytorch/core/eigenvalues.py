@@ -11,12 +11,15 @@ GPU-native equivalents for the original C++ solvers:
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import cast
+
 import torch
-from typing import Callable
 
 
 # Registry of named solvers
-SOLVERS: dict[str, Callable[[torch.Tensor], torch.Tensor]] = {}
+SolverResult = torch.Tensor | tuple[torch.Tensor, torch.Tensor]
+SOLVERS: dict[str, Callable[[torch.Tensor], SolverResult]] = {}
 _CUDA_CPU_FALLBACK_ROWS = 512
 
 
@@ -30,9 +33,9 @@ def _register_defaults() -> None:
         if L.shape[0] == 1:
             return L.diagonal().real
         if L.device.type == "cuda" and L.shape[0] <= _CUDA_CPU_FALLBACK_ROWS:
-            return torch.linalg.eigvalsh(L.cpu()).to(device=L.device)
+            return cast(torch.Tensor, torch.linalg.eigvalsh(L.cpu()).to(device=L.device))
         # torch.linalg.eigvalsh returns eigenvalues in ascending order.
-        return torch.linalg.eigvalsh(L)
+        return cast(torch.Tensor, torch.linalg.eigvalsh(L))
 
     def eigh_pairs(L: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Return (eigenvalues, eigenvectors) like scipy.linalg.eigh."""
@@ -82,14 +85,14 @@ def solve_eigenvalues(
         Sorted real eigenvalues.
     """
     if callable(algorithm):
-        return algorithm(L)
+        return cast(torch.Tensor, algorithm(L))
 
     if algorithm not in SOLVERS:
         raise ValueError(
             f"Unknown eigenvalue algorithm '{algorithm}'. Available: {list(SOLVERS.keys())}"
         )
 
-    return SOLVERS[algorithm](L)
+    return cast(torch.Tensor, SOLVERS[algorithm](L))
 
 
 def solve_eigenpairs(

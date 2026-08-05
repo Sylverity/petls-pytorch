@@ -224,8 +224,14 @@ def analyze_file(path: str, plot_dir: Optional[str] = None) -> Dict:
         # 3. Eigs fraction
         fig, ax = plt.subplots(figsize=(8, 4))
         frac = eigs / (total + 1e-6)
+        median_fraction = float(np.median(frac))
         ax.hist(frac, bins=30, color="steelblue", edgecolor="white")
-        ax.axvline(np.median(frac), color="red", ls="--", label=f"median={np.median(frac):.2f}")
+        ax.axvline(
+            median_fraction,
+            color="red",
+            ls="--",
+            label=f"median={median_fraction:.2f}",
+        )
         ax.set_xlabel("Fraction of time in eigendecomposition")
         ax.set_ylabel("Count")
         ax.set_title(f"{stem} — Eigs time fraction distribution")

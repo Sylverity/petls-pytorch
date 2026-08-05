@@ -45,6 +45,7 @@ class BenchmarkResult:
     complex_build_time_ms: float = 0.0
     skipped: bool = False
     skip_reason: str = ""
+    dtype: str = "float32"
 
 
 @dataclass
@@ -75,7 +76,7 @@ class BenchmarkSuiteResult:
         sizes = [r.matrix_rows for r in self.results]
         completed = [r for r in self.results if not r.skipped]
         skipped = [r for r in self.results if r.skipped]
-        config_builds = {}
+        config_builds: dict[tuple[int, str, int, str, int, int], float] = {}
         for r in self.results:
             key = (r.config_index, r.dataset, r.n_points, r.complex_type, r.max_dim, r.seed)
             config_builds.setdefault(key, r.complex_build_time_ms)
@@ -124,18 +125,36 @@ class BenchmarkRunner:
         package: str = "petls-pytorch",
         verbose: bool = True,
         max_matrix_rows: Optional[int] = None,
+        dtype: str = "float32",
     ):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.algorithm = algorithm
         self.device = device
         self.package = package.lower()
+        if dtype not in {"float32", "float64"}:
+            raise ValueError("dtype must be 'float32' or 'float64'")
+        self.dtype = dtype
         self.verbose = verbose
         self.max_matrix_rows = max_matrix_rows
 
     @staticmethod
     def _result_fieldnames() -> list[str]:
-        return list(asdict(BenchmarkResult(package="", dataset="", n_points=0, complex_type="", max_dim=0, dim=0, filtration_a=0.0, filtration_b=0.0, matrix_rows=0)).keys())
+        return list(
+            asdict(
+                BenchmarkResult(
+                    package="",
+                    dataset="",
+                    n_points=0,
+                    complex_type="",
+                    max_dim=0,
+                    dim=0,
+                    filtration_a=0.0,
+                    filtration_b=0.0,
+                    matrix_rows=0,
+                )
+            ).keys()
+        )
 
     def _print(self, message: str = "") -> None:
         if self.verbose:
@@ -144,23 +163,23 @@ class BenchmarkRunner:
     def _prepare_backend(self, package: str) -> None:
         """Import and configure package code outside timed benchmark regions."""
         if package == "petls-pytorch":
-            import petls_pytorch
             import torch
             from petls_pytorch.core.eigenvalues import solve_eigenvalues
 
-            petls_pytorch.set_device(self.device)
             device = torch.device(self.device)
-            dense = torch.eye(4, device=device)
+            dtype = getattr(torch, self.dtype)
+            dense = torch.eye(4, device=device, dtype=dtype)
             sparse = dense.to_sparse_coo()
             _ = sparse.to_dense() @ dense
             row_index = torch.arange(600, device=device) % 300
             col_index = torch.arange(600, device=device)
-            sparse_boundary = torch.sparse_coo_tensor(
-                torch.stack((row_index, col_index)),
-                torch.ones(600, device=device),
-                size=(300, 600),
-                device=device,
-            ).coalesce()
+            with torch.sparse.check_sparse_tensor_invariants(False):
+                sparse_boundary = torch.sparse_coo_tensor(
+                    torch.stack((row_index, col_index)),
+                    torch.ones(600, device=device, dtype=dtype),
+                    size=(300, 600),
+                    device=device,
+                ).coalesce()
             boundary_indices = sparse_boundary.indices()
             boundary_values = sparse_boundary.values()
             boundary_mask = (boundary_indices[0] < 300) & (boundary_indices[1] < 525)
@@ -172,23 +191,27 @@ class BenchmarkRunner:
             ).coalesce()
             sparse_dense = sparse_submatrix.to_dense()
             _ = sparse_dense @ sparse_dense.T
-            singular = torch.eye(256, device=device)
+            singular = torch.eye(256, device=device, dtype=dtype)
             singular[-1] = 0
             singular[:, -1] = 0
-            _ = torch.linalg.pinv(singular, hermitian=True) @ torch.ones(256, 16, device=device)
+            _ = torch.linalg.pinv(singular, hermitian=True) @ torch.ones(
+                256, 16, device=device, dtype=dtype
+            )
             _ = torch.linalg.eigvalsh(dense)
-            _ = torch.linalg.eigvalsh(torch.eye(300))
-            scatter_target = torch.zeros(512, 512, device=device)
+            _ = torch.linalg.eigvalsh(torch.eye(300, dtype=dtype))
+            scatter_target = torch.zeros(512, 512, device=device, dtype=dtype)
             scatter_index = torch.arange(512, device=device)
             scatter_target.index_put_(
                 (scatter_index, scatter_index),
-                torch.ones(512, device=device),
+                torch.ones(512, device=device, dtype=dtype),
                 accumulate=True,
             )
             if self.device.startswith("cuda"):
                 if torch.cuda.is_available():
                     torch.empty(1, device=self.device)
-                    _ = solve_eigenvalues(torch.eye(300, device=device), self.algorithm)
+                    _ = solve_eigenvalues(
+                        torch.eye(300, device=device, dtype=dtype), self.algorithm
+                    )
                     torch.cuda.synchronize()
         elif package == "petls":
             import petls  # noqa: F401
@@ -212,10 +235,10 @@ class BenchmarkRunner:
         if dim == 0:
             if len(complex_obj.filtered_boundaries) <= 1:
                 return 0
-            return complex_obj.filtered_boundaries[1].index_of_filtration(False, a) + 1
+            return int(complex_obj.filtered_boundaries[1].index_of_filtration(False, a) + 1)
         if dim > complex_obj.top_dim:
             return 0
-        return complex_obj.filtered_boundaries[dim].index_of_filtration(True, a) + 1
+        return int(complex_obj.filtered_boundaries[dim].index_of_filtration(True, a) + 1)
 
     def _write_partial_result(self, path: Path, result: BenchmarkResult) -> None:
         exists = path.exists()
@@ -279,7 +302,7 @@ class BenchmarkRunner:
 
         self._print(
             f"\n[Benchmark] #{config_index} {dataset_name} | n={n_points} | {complex_type} | "
-            f"max_dim={max_dim} | package={package} | device={self.device}"
+            f"max_dim={max_dim} | package={package} | device={self.device} | dtype={self.dtype}"
         )
         self._print("-" * 60)
 
@@ -295,6 +318,7 @@ class BenchmarkRunner:
             seed=seed,
             package=package,
             device=self.device if package == "petls-pytorch" else None,
+            dtype=self.dtype,
             compute_matrix_stats=compute_matrix_stats,
             rips_threshold_quantile=rips_threshold_quantile,
         )
@@ -344,6 +368,7 @@ class BenchmarkRunner:
                     matrix_rows=rows_estimate,
                     algorithm=self.algorithm,
                     device=self.device,
+                    dtype=self.dtype,
                     seed=seed,
                     config_index=config_index,
                     request_index=request_index,
@@ -387,6 +412,7 @@ class BenchmarkRunner:
                     total_time_ms=t_build,
                     algorithm=self.algorithm,
                     device=self.device,
+                    dtype=self.dtype,
                     seed=seed,
                     config_index=config_index,
                     request_index=request_index,
@@ -439,6 +465,7 @@ class BenchmarkRunner:
                 least_nonzero=float(lam),
                 algorithm=self.algorithm,
                 device=self.device,
+                dtype=self.dtype,
                 seed=seed,
                 config_index=config_index,
                 request_index=request_index,
@@ -510,6 +537,7 @@ def run_single_benchmark(
     device: str = "cpu",
     output_dir: str = "./benchmark_results",
     seed: int = 42,
+    dtype: str = "float32",
 ) -> BenchmarkSuiteResult:
     """Convenience function for a single benchmark run."""
     runner = BenchmarkRunner(
@@ -517,6 +545,7 @@ def run_single_benchmark(
         algorithm=algorithm,
         package=package,
         device=device,
+        dtype=dtype,
     )
     return runner.run_suite(
         name=f"{package}_{dataset}_{n_points}_{complex_type}",

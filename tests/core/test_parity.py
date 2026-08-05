@@ -72,6 +72,23 @@ def test_profile_wrap_up(small_complex):
     assert profile.lambdas == [1.0]
 
 
+def test_profile_uses_scale_aware_object_tolerance():
+    profile = petls_pytorch.Profile(zero_atol=0.1, zero_rtol=0.0)
+    profile.wrap_up(dim=0, a=0.0, b=0.0, L_rows=3, eigs=[0.0, 0.05, 1.0])
+
+    assert profile.bettis == [2]
+    assert profile.lambdas == [1.0]
+
+    complex_ = petls_pytorch.Complex(
+        boundaries=[],
+        filtrations=[[0.0]],
+        zero_atol=0.2,
+        zero_rtol=0.03,
+    )
+    assert complex_.profile.zero_atol == pytest.approx(0.2)
+    assert complex_.profile.zero_rtol == pytest.approx(0.03)
+
+
 def test_eigvalsh_export():
     """petls_pytorch exposes scipy.linalg.eigvalsh like the original package."""
     from scipy.linalg import eigvalsh as scipy_eigvalsh
