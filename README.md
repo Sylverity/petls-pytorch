@@ -172,7 +172,8 @@ it reports persistent Betti numbers. Gudhi persistence is the authoritative
 homology source when available; persistent-Laplacian nullity, least nonzero
 eigenvalues, the effective zero tolerance, smallest eigenvalues, matrix rows,
 cost estimates, and per-dimension calculation status are returned separately
-for numerical auditing.
+for numerical auditing. Requested dimensions above the complex's `top_dim`
+return Betti number zero and an empty spectrum.
 
 `harmonic_features()` returns each numerical zero-mode eigenvector as
 simplex/coefficient records. Harmonic bases need not be unique, but their

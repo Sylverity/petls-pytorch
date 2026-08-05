@@ -467,8 +467,21 @@ class Complex:
         """
         if self.top_dim == 0:
             return torch.empty(0, 0, dtype=self.dtype, device=self.device)
-        self._guard_dense_laplacian(self.top_dim, a, a)
         fbm = self.filtered_boundaries[self.top_dim]
+        flipped_rows = fbm.index_of_filtration(False, a) + 1
+        boundary_columns = fbm.index_of_filtration(True, a) + 1
+        element_size = torch.empty((), dtype=self.dtype).element_size()
+        flipped_bytes = flipped_rows * flipped_rows * element_size
+        boundary_bytes = flipped_rows * boundary_columns * element_size
+        peak_bytes = max(flipped_bytes, boundary_bytes)
+        exceeds_rows = self.max_matrix_rows is not None and flipped_rows > self.max_matrix_rows
+        exceeds_bytes = self.max_matrix_bytes is not None and peak_bytes > self.max_matrix_bytes
+        if exceeds_rows or exceeds_bytes:
+            raise LaplacianSizeError(
+                f"Flipped top-dimensional Laplacian at filtration {a} would have "
+                f"{flipped_rows} rows and allocate approximately {peak_bytes} bytes for "
+                "its largest dense matrix, exceeding this object's matrix guard."
+            )
         B = fbm.submatrix_at_filtration(a)
         if B.shape[0] == 0 or B.shape[1] == 0:
             return torch.empty(0, 0, dtype=self.dtype, device=self.device)
@@ -584,15 +597,14 @@ class Complex:
                 responses.append((d, fa, fb, eigs_list))
                 continue
 
-            # Determine matrix size for profiling
-            if d == 0:
-                l_rows = self.filtered_boundaries[1].index_of_filtration(False, fa) + 1
-            else:
-                l_rows = self.filtered_boundaries[d].index_of_filtration(True, fa) + 1
+            # Determine matrix size for profiling, including dimensions above
+            # the complex where the spectrum is empty.
+            l_rows = self._laplacian_rows(d, fa)
             self.profile.L_rows.append(l_rows)
 
             self.profile.start_L()
             use_sparse_ordinary = self._eigs_algorithm == "sparse" and fa == fb
+            use_flipped_top_dim = False
             if use_sparse_ordinary:
                 # Construction and solve happen together inside SciPy's sparse
                 # operator path; no dense Laplacian is created.
@@ -601,10 +613,16 @@ class Complex:
                 eigs_list = self.ordinary_spectrum(d, fa, self._num_eigenvalues)
                 self.profile.stop_eigs()
             else:
-                # Flipped top-dimension optimization
+                # Flip only when B @ B.T is smaller than B.T @ B.
                 if d == self.top_dim and self.flipped:
-                    self._guard_dense_laplacian(d, fa, fb)
-                    L = self.get_L_top_dim_flipped(fa)
+                    fbm = self.filtered_boundaries[self.top_dim]
+                    boundary_rows = fbm.index_of_filtration(False, fa) + 1
+                    boundary_columns = fbm.index_of_filtration(True, fa) + 1
+                    use_flipped_top_dim = boundary_rows < boundary_columns
+                    if use_flipped_top_dim:
+                        L = self.get_L_top_dim_flipped(fa)
+                    else:
+                        L = self.get_L(d, fa, fb)
                 else:
                     L = self.get_L(d, fa, fb)
                 self.profile.stop_L()
@@ -621,7 +639,7 @@ class Complex:
             self.profile.stop_all()
 
             # Zero-pad flipped top-dimension eigenvalues to match true Laplacian size
-            if d == self.top_dim and self.flipped and not use_sparse_ordinary:
+            if use_flipped_top_dim:
                 fbm = self.filtered_boundaries[self.top_dim]
                 B = fbm.submatrix_at_filtration(fa)
                 m, n = B.shape

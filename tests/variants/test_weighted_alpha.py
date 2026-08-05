@@ -148,6 +148,21 @@ def test_topology_summary_defaults_follow_complex_dimension():
     assert set(edge_summary["calculation_status"]) == {0, 1}
 
 
+def test_topology_summary_returns_empty_result_above_complex_dimension():
+    vertex_tree = gudhi.SimplexTree()
+    vertex_tree.insert([0], filtration=0.0)
+    complex_ = Complex(simplex_tree=vertex_tree)
+
+    summary = complex_.topology_summary(dimensions=(1,))
+
+    assert summary["betti"][1] == 0
+    assert summary["spectral_nullity"][1] == 0
+    assert summary["matrix_rows"][1] == 0
+    assert summary["smallest_eigenvalues"][1] == []
+    assert summary["calculation_status"][1] == "complete"
+    assert complex_.spectra(1, 0.0, 0.0) == []
+
+
 def test_simplex_coordinates_and_harmonic_features_are_traceable():
     labels = [f"point-{index}" for index in range(12)]
     alpha = Alpha(

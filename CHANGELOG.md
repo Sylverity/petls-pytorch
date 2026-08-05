@@ -55,6 +55,8 @@
   the final persistent-Laplacian output at filtration `a`.
 - Made default topology summaries dimension-aware and honored every supported
   sparse eigenvalue-order selection.
+- Guarded the actual flipped top-dimensional allocation, used flipping only
+  when it reduces matrix size, and returned empty summaries above `top_dim`.
 - Clarified oversized harmonic localization behavior and corrected original
   PETLS benchmark dtype metadata to report `native`.
 - Aligned profiling summaries with object-specific, scale-aware zero
