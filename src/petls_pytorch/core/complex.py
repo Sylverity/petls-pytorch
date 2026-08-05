@@ -1051,8 +1051,6 @@ class Complex:
         available.  Spectral nullity is retained as an auditable numerical
         companion rather than silently replacing homology.
         """
-        from scipy.sparse.linalg import ArpackNoConvergence
-
         if b < a:
             raise ValueError("b must be greater than or equal to a")
         policy = self.on_oversize if on_oversize is None else on_oversize
@@ -1143,17 +1141,6 @@ class Complex:
                 spectrum_certified[dim] = None
                 spectrum_max_residual[dim] = None
                 continue
-            except ArpackNoConvergence:
-                statuses[dim] = "sparse_solver_failed"
-                spectral_nullity[dim] = None
-                least_nonzero[dim] = None
-                tolerances[dim] = None
-                smallest[dim] = []
-                spectrum_solver[dim] = "arpack"
-                spectrum_certified[dim] = False
-                spectrum_max_residual[dim] = None
-                continue
-
             values = np.asarray(eigenvalues, dtype=np.float64)
             nullity, least = self.eigenvalues_summarize(values)
             tolerance = self._zero_tolerance(values)

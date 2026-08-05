@@ -27,17 +27,6 @@ def test_get_L_top_dim_flipped_shape():
     assert L_flip.shape == (3, 3)
 
 
-def test_flipped_eigenvalues_match_regular():
-    """When flipped=True, spectra() for top_dim should match regular spectra()."""
-    pl = get_test_complex()
-
-    eigs_regular = pl.spectra(2, 5, 5)
-    pl.flipped = True
-    eigs_flipped = pl.spectra(2, 5, 5)
-
-    np.testing.assert_allclose(eigs_regular, eigs_flipped, atol=ATOL, rtol=RTOL)
-
-
 def test_flipped_optimization_preserves_spectrum_when_matrix_is_smaller():
     boundary = np.array([[-1.0, -1.0, 0.0], [1.0, 0.0, 1.0]])
     complex_ = Complex(

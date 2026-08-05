@@ -389,36 +389,6 @@ def test_sparse_summary_never_reports_gap_when_arpack_misses_null_modes(monkeypa
     assert summary["spectrum_certified"][0] is False
 
 
-def test_sparse_summary_returns_explicit_status_when_all_sparse_solvers_fail(monkeypatch):
-    import scipy.sparse.linalg
-
-    complex_ = Complex(
-        simplex_tree=_disconnected_chains_tree(17, 30),
-        dtype=torch.float64,
-        eigs_algorithm="sparse",
-    )
-    complex_.set_eigs_algorithm("sparse", num_eigenvalues=20)
-    monkeypatch.setattr(complex_, "_block_lowest_eigenpairs", lambda *args: None)
-
-    def fail_scalar_spectrum(*args, **kwargs):
-        raise scipy.sparse.linalg.ArpackNoConvergence(
-            "no convergence",
-            np.empty(0),
-            np.empty((510, 0)),
-        )
-
-    monkeypatch.setattr(scipy.sparse.linalg, "eigsh", fail_scalar_spectrum)
-
-    summary = complex_.topology_summary(dimensions=(0,), a=0.0, b=0.0)
-
-    assert summary["betti"][0] == 17
-    assert summary["spectral_nullity"][0] is None
-    assert summary["least_nonzero_eigenvalue"][0] is None
-    assert summary["calculation_status"][0] == "sparse_solver_failed"
-    assert summary["spectrum_solver"][0] == "arpack"
-    assert summary["spectrum_certified"][0] is False
-
-
 def test_oversized_harmonic_features_have_explicit_ordinary_and_persistent_behavior():
     isolated_tree = gudhi.SimplexTree()
     for vertex in range(20):

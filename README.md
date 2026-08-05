@@ -231,8 +231,7 @@ the numerical nullity agrees with Gudhi homology. The summary exposes
 `spectrum_max_normalized_residual` for auditing. If recovery is incomplete or
 cannot be certified, `least_nonzero_eigenvalue` is `None` and
 `calculation_status` is `spectral_nullity_mismatch`,
-`sparse_spectrum_unverified`, `sparse_null_modes_only`, or
-`sparse_solver_failed` as appropriate.
+`sparse_spectrum_unverified`, or `sparse_null_modes_only` as appropriate.
 
 Persistent Schur complements can become dense, so oversized `a < b` requests
 either raise `LaplacianSizeError` or return Gudhi homology-only status through
