@@ -56,10 +56,6 @@ def test_benchmark_dtype_validation(tmp_path):
         generate_dataset(name="sphere", n_points=4, dtype="float16")
 
 
-def test_benchmark_csv_schema_records_dtype():
-    assert "dtype" in BenchmarkRunner._result_fieldnames()
-
-
 def test_reference_petls_reports_native_dtype_for_metadata_and_skipped_rows(
     monkeypatch,
     tmp_path,

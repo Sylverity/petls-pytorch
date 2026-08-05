@@ -9,6 +9,8 @@ get_L, get_up, get_down, spectra, and eigenpairs.
 from __future__ import annotations
 
 import logging
+import warnings
+from dataclasses import dataclass
 from typing import Any, Callable, Hashable, List, Optional, Sequence, Tuple, cast
 
 import numpy as np
@@ -17,6 +19,20 @@ import torch
 from petls_pytorch._config import resolve_device, resolve_dtype
 from petls_pytorch.core.filtered_boundary import FilteredBoundaryMatrix
 from petls_pytorch.core.profile import Profile
+
+
+_SPARSE_BLOCK_MAX_EIGENVALUES = 256
+_SPARSE_LU_MAX_ROWS = 6_000
+_SPARSE_LU_MAX_NNZ = 500_000
+_SPARSE_LU_MAX_FILL_RATIO = 64.0
+_SPARSE_LOBPCG_MAX_ITERATIONS = 200
+
+
+@dataclass(frozen=True)
+class _SparseEigenpairsResult:
+    values: np.ndarray
+    vectors: np.ndarray
+    diagnostics: dict[str, Any]
 
 
 class LaplacianSizeError(MemoryError):
@@ -351,15 +367,179 @@ class Complex:
             result = result + coboundary_scipy @ coboundary_scipy.T
         return result.tocsr()
 
-    def _sparse_ordinary_eigenpairs(
+    def _sparse_eigenpair_diagnostics(
+        self,
+        laplacian,
+        values: np.ndarray,
+        vectors: np.ndarray,
+        known_betti: int | None,
+        solver: str,
+        candidate_solver_is_reliable: bool,
+        **extra: Any,
+    ) -> dict[str, Any]:
+        """Audit a partial lowest spectrum against homology and residuals."""
+        if values.size:
+            residuals = np.linalg.norm(laplacian @ vectors - vectors * values, axis=0)
+            row_sums = np.asarray(np.abs(laplacian).sum(axis=1)).ravel()
+            operator_scale = max(1.0, float(row_sums.max(initial=0.0)))
+            denominators = np.maximum(operator_scale, np.abs(values))
+            max_normalized_residual = float((residuals / denominators).max(initial=0.0))
+            gram = vectors.T @ vectors
+            orthogonality_error = float(np.linalg.norm(gram - np.eye(gram.shape[0]), ord=2))
+        else:
+            max_normalized_residual = 0.0
+            orthogonality_error = 0.0
+
+        tolerance = self._zero_tolerance(values)
+        numerical_nullity = int(np.count_nonzero(np.abs(values) <= tolerance))
+        nullity_matches = known_betti is not None and numerical_nullity == known_betti
+        epsilon = float(np.finfo(np.float64).eps)
+        residual_limit = max(
+            1_000.0 * epsilon,
+            self.zero_rtol * 0.1,
+            self.zero_atol,
+        )
+        orthogonality_limit = max(1e-8, 10.0 * np.sqrt(epsilon))
+        residuals_pass = bool(max_normalized_residual <= residual_limit)
+        orthogonality_pass = bool(orthogonality_error <= orthogonality_limit)
+        has_gap_candidate = known_betti is not None and known_betti < len(values)
+        lowest_spectrum_certified = bool(
+            candidate_solver_is_reliable
+            and nullity_matches
+            and has_gap_candidate
+            and residuals_pass
+            and orthogonality_pass
+        )
+        return {
+            "solver": solver,
+            "authoritative_nullity": known_betti,
+            "numerical_nullity": numerical_nullity,
+            "nullity_matches": nullity_matches if known_betti is not None else None,
+            "max_normalized_residual": max_normalized_residual,
+            "orthogonality_error": orthogonality_error,
+            "residual_limit": residual_limit,
+            "orthogonality_limit": orthogonality_limit,
+            "residuals_pass": residuals_pass,
+            "orthogonality_pass": orthogonality_pass,
+            "lowest_spectrum_certified": lowest_spectrum_certified,
+            **extra,
+        }
+
+    def _block_lowest_eigenpairs(
+        self,
+        laplacian,
+        requested: int,
+        known_betti: int,
+    ) -> _SparseEigenpairsResult | None:
+        """Recover a repeated Hodge kernel with block LOBPCG.
+
+        The block width includes the authoritative nullity and several positive
+        candidates.  A shifted positive-definite inverse is used only as a
+        preconditioner, so the eigenproblem remains the original Laplacian.
+        """
+        import scipy.sparse
+        import scipy.sparse.linalg
+
+        rows = laplacian.shape[0]
+        if (
+            known_betti < 1
+            or requested <= known_betti
+            or requested > _SPARSE_BLOCK_MAX_EIGENVALUES
+            or 5 * requested >= rows
+        ):
+            return None
+
+        # The incidence entries are exact small integers in the common case.
+        # Solving in float64 avoids making nullspace recovery depend on an
+        # object's storage precision.
+        operator = laplacian.astype(np.float64, copy=False).tocsr()
+        row_sums = np.asarray(np.abs(operator).sum(axis=1)).ravel()
+        operator_scale = max(1.0, float(row_sums.max(initial=0.0)))
+        shift = 1e-3 * operator_scale
+        preconditioner_name = "shifted_jacobi"
+        fill_ratio: float | None = None
+
+        diagonal = np.asarray(operator.diagonal(), dtype=np.float64)
+        inverse_diagonal = 1.0 / np.maximum(diagonal + shift, shift)
+        preconditioner = scipy.sparse.linalg.LinearOperator(
+            operator.shape,
+            matvec=lambda vector: inverse_diagonal * vector,
+            matmat=lambda matrix: inverse_diagonal[:, None] * matrix,
+            dtype=np.float64,
+        )
+
+        if rows <= _SPARSE_LU_MAX_ROWS and operator.nnz <= _SPARSE_LU_MAX_NNZ:
+            try:
+                shifted = operator + shift * scipy.sparse.eye(rows, format="csr")
+                factor = scipy.sparse.linalg.splu(
+                    shifted.tocsc(),
+                    permc_spec="MMD_AT_PLUS_A",
+                    diag_pivot_thresh=0.0,
+                )
+                fill_ratio = float(factor.L.nnz + factor.U.nnz) / max(1, operator.nnz)
+                if fill_ratio <= _SPARSE_LU_MAX_FILL_RATIO:
+                    preconditioner = scipy.sparse.linalg.LinearOperator(
+                        operator.shape,
+                        matvec=factor.solve,
+                        matmat=factor.solve,
+                        dtype=np.float64,
+                    )
+                    preconditioner_name = "shifted_sparse_lu"
+                else:
+                    del factor
+            except (MemoryError, RuntimeError, ValueError):
+                # The block solve remains valid with the bounded-memory Jacobi
+                # preconditioner; convergence certification below decides
+                # whether its result is reportable.
+                pass
+
+        initial = np.random.default_rng(0).standard_normal((rows, requested))
+        initial, _ = np.linalg.qr(initial, mode="reduced")
+        epsilon = float(np.finfo(np.float64).eps)
+        solver_tolerance = max(
+            100.0 * epsilon * operator_scale,
+            0.1 * min(self.zero_atol, self.zero_rtol * operator_scale),
+        )
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            values, vectors = scipy.sparse.linalg.lobpcg(
+                operator,
+                initial,
+                M=preconditioner,
+                largest=False,
+                tol=solver_tolerance,
+                maxiter=_SPARSE_LOBPCG_MAX_ITERATIONS,
+            )
+        values = np.asarray(values, dtype=np.float64)
+        vectors = np.asarray(vectors, dtype=np.float64)
+        order = np.argsort(values, kind="stable")
+        values = values[order]
+        vectors = vectors[:, order]
+        if not np.all(np.isfinite(values)) or not np.all(np.isfinite(vectors)):
+            return None
+        diagnostics = self._sparse_eigenpair_diagnostics(
+            operator,
+            values,
+            vectors,
+            known_betti,
+            solver="lobpcg",
+            candidate_solver_is_reliable=True,
+            preconditioner=preconditioner_name,
+            preconditioner_shift=shift,
+            factor_fill_ratio=fill_ratio,
+            solver_tolerance=solver_tolerance,
+            solver_warning_count=len(caught),
+        )
+        return _SparseEigenpairsResult(values, vectors, diagnostics)
+
+    def _sparse_ordinary_eigenpairs_result(
         self,
         dim: int,
         scale: float,
         num_eigenvalues: int | None = None,
-        return_eigenvectors: bool = False,
         augment_for_betti: bool = True,
         eigenvalue_order: str | None = None,
-    ):
+    ) -> _SparseEigenpairsResult:
         from petls_pytorch.core.eigenvalues import (
             EIGENVALUE_ORDERS,
             eigenvalue_indices,
@@ -373,7 +553,15 @@ class Complex:
         if rows == 0:
             empty_values = np.empty(0, dtype=np.float64)
             empty_vectors = np.empty((0, 0), dtype=np.float64)
-            return (empty_values, empty_vectors) if return_eigenvectors else empty_values
+            diagnostics = self._sparse_eigenpair_diagnostics(
+                laplacian,
+                empty_values,
+                empty_vectors,
+                self._gudhi_betti_at(dim, scale),
+                solver="empty",
+                candidate_solver_is_reliable=True,
+            )
+            return _SparseEigenpairsResult(empty_values, empty_vectors, diagnostics)
 
         requested = self._num_eigenvalues if num_eigenvalues is None else int(num_eigenvalues)
         if requested < 1:
@@ -391,9 +579,15 @@ class Complex:
             and known_betti is not None
             and known_betti < rows
         ):
-            requested = max(requested, min(known_betti + 3, 256))
+            requested = max(
+                requested,
+                min(known_betti + 3, _SPARSE_BLOCK_MAX_EIGENVALUES),
+            )
         requested = min(requested, rows)
 
+        candidate_solver_is_reliable = True
+        solver = "exact_zero"
+        extra_diagnostics: dict[str, Any] = {}
         if laplacian.nnz == 0:
             values = np.zeros(rows, dtype=np.float64)
             selected = eigenvalue_indices(values, requested, which)
@@ -401,18 +595,41 @@ class Complex:
             vectors[selected, np.arange(len(selected))] = 1.0
             values = values[selected]
         elif np.count_nonzero(laplacian.diagonal()) == laplacian.nnz:
+            solver = "exact_diagonal"
             values = np.asarray(laplacian.diagonal(), dtype=np.float64)
             selected = eigenvalue_indices(values, requested, which)
             vectors = np.zeros((rows, len(selected)), dtype=np.float64)
             vectors[selected, np.arange(len(selected))] = 1.0
             values = values[selected]
-        elif rows <= 256 and requested == rows:
-            # Complete output is dense by definition, but this fallback is
-            # deliberately limited to small matrices.
+        elif rows <= 256 and (
+            requested == rows
+            or (which in {"SM", "SA"} and known_betti is not None and known_betti > 1)
+        ):
+            # A bounded complete solve is deterministic for small repeated
+            # kernels and avoids SciPy LOBPCG's own implicit dense fallback
+            # when the requested block is large relative to the matrix.
+            solver = "dense_complete"
             dense = laplacian.toarray()
             values, vectors = np.linalg.eigh(dense)
         else:
             requested = min(requested, rows - 1)
+            block_result = None
+            block_failure: str | None = None
+            if which in {"SM", "SA"} and known_betti is not None:
+                try:
+                    block_result = self._block_lowest_eigenpairs(
+                        laplacian,
+                        requested,
+                        known_betti,
+                    )
+                except (MemoryError, RuntimeError, ValueError, np.linalg.LinAlgError) as error:
+                    block_failure = type(error).__name__
+            if block_result is not None:
+                return block_result
+            solver = "arpack"
+            # Scalar Lanczos can represent a simple nullspace. Repeated
+            # kernels require the block solve above before a gap is trusted.
+            candidate_solver_is_reliable = known_betti in {0, 1}
             solver_which = "LA" if which == "BE" and requested == 1 else which
             values, vectors = scipy.sparse.linalg.eigsh(
                 laplacian,
@@ -420,11 +637,39 @@ class Complex:
                 which=solver_which,
                 return_eigenvectors=True,
             )
+            extra_diagnostics["block_failure"] = block_failure
         values, selected_vectors = select_eigenpairs(values, vectors, requested, which)
         assert selected_vectors is not None
+        diagnostics = self._sparse_eigenpair_diagnostics(
+            laplacian,
+            values,
+            selected_vectors,
+            known_betti,
+            solver=solver,
+            candidate_solver_is_reliable=candidate_solver_is_reliable,
+            **extra_diagnostics,
+        )
+        return _SparseEigenpairsResult(values, selected_vectors, diagnostics)
+
+    def _sparse_ordinary_eigenpairs(
+        self,
+        dim: int,
+        scale: float,
+        num_eigenvalues: int | None = None,
+        return_eigenvectors: bool = False,
+        augment_for_betti: bool = True,
+        eigenvalue_order: str | None = None,
+    ):
+        result = self._sparse_ordinary_eigenpairs_result(
+            dim,
+            scale,
+            num_eigenvalues,
+            augment_for_betti,
+            eigenvalue_order,
+        )
         if return_eigenvectors:
-            return values, selected_vectors
-        return values
+            return result.values, result.vectors
+        return result.values
 
     def ordinary_spectrum(
         self,
@@ -825,6 +1070,9 @@ class Complex:
         statuses: dict[int, str] = {}
         estimates: dict[int, dict[str, Any]] = {}
         betti_source: dict[int, str] = {}
+        spectrum_solver: dict[int, str | None] = {}
+        spectrum_certified: dict[int, bool | None] = {}
+        spectrum_max_residual: dict[int, float | None] = {}
 
         for raw_dim in dimensions:
             dim = int(raw_dim)
@@ -851,17 +1099,36 @@ class Complex:
                 least_nonzero[dim] = None
                 tolerances[dim] = None
                 smallest[dim] = []
+                spectrum_solver[dim] = None
+                spectrum_certified[dim] = None
+                spectrum_max_residual[dim] = None
                 continue
 
+            sparse_diagnostics: dict[str, Any] | None = None
             try:
                 if a == b and (
                     not estimate["within_dense_limits"] or self._eigs_algorithm == "sparse"
                 ):
-                    eigenvalues = self.ordinary_spectrum(dim, a, eigenvalue_order="SM")
+                    sparse_result = self._sparse_ordinary_eigenpairs_result(
+                        dim,
+                        a,
+                        eigenvalue_order="SM",
+                    )
+                    eigenvalues = sparse_result.values
+                    sparse_diagnostics = sparse_result.diagnostics
                     statuses[dim] = "sparse_lowest_spectrum"
+                    spectrum_solver[dim] = str(sparse_diagnostics["solver"])
+                    certified = sparse_diagnostics["lowest_spectrum_certified"]
+                    spectrum_certified[dim] = bool(certified)
+                    spectrum_max_residual[dim] = float(
+                        sparse_diagnostics["max_normalized_residual"]
+                    )
                 else:
                     eigenvalues = self.spectra(dim, a, b)
                     statuses[dim] = "complete"
+                    spectrum_solver[dim] = "dense"
+                    spectrum_certified[dim] = None
+                    spectrum_max_residual[dim] = None
             except LaplacianSizeError:
                 if policy == "raise":
                     raise
@@ -870,19 +1137,44 @@ class Complex:
                 least_nonzero[dim] = None
                 tolerances[dim] = None
                 smallest[dim] = []
+                spectrum_solver[dim] = None
+                spectrum_certified[dim] = None
+                spectrum_max_residual[dim] = None
                 continue
-
             values = np.asarray(eigenvalues, dtype=np.float64)
             nullity, least = self.eigenvalues_summarize(values)
             tolerance = self._zero_tolerance(values)
             spectral_nullity[dim] = nullity
-            if statuses[dim] == "sparse_lowest_spectrum" and (
-                least == 0.0 or (authoritative is not None and authoritative >= len(values))
-            ):
-                least_nonzero[dim] = None
-                statuses[dim] = "sparse_null_modes_only"
+            if statuses[dim] == "sparse_lowest_spectrum":
+                only_known_null_modes = least == 0.0 or (
+                    authoritative is not None
+                    and authoritative >= len(values)
+                    and nullity == len(values)
+                )
+                if only_known_null_modes:
+                    least_nonzero[dim] = None
+                    statuses[dim] = "sparse_null_modes_only"
+                elif authoritative is not None and nullity != authoritative:
+                    least_nonzero[dim] = None
+                    statuses[dim] = "spectral_nullity_mismatch"
+                elif (
+                    authoritative is not None
+                    and sparse_diagnostics is not None
+                    and not sparse_diagnostics["lowest_spectrum_certified"]
+                ):
+                    least_nonzero[dim] = None
+                    statuses[dim] = "sparse_spectrum_unverified"
+                else:
+                    least_nonzero[dim] = least
             else:
-                least_nonzero[dim] = least
+                if authoritative is not None and nullity != authoritative:
+                    least_nonzero[dim] = None
+                    statuses[dim] = "spectral_nullity_mismatch"
+                    spectrum_certified[dim] = False
+                else:
+                    least_nonzero[dim] = least
+                    if authoritative is not None:
+                        spectrum_certified[dim] = True
             tolerances[dim] = tolerance
             smallest[dim] = np.sort(values)[:smallest_eigenvalues].tolist()
             if authoritative is None:
@@ -903,6 +1195,9 @@ class Complex:
             "zero_rtol": self.zero_rtol,
             "smallest_eigenvalues": smallest,
             "calculation_status": statuses,
+            "spectrum_solver": spectrum_solver,
+            "spectrum_certified": spectrum_certified,
+            "spectrum_max_normalized_residual": spectrum_max_residual,
             "estimates": estimates,
             "method": "gudhi_homology_with_persistent_laplacian_spectrum",
         }
@@ -944,16 +1239,24 @@ class Complex:
             if feature_target < authoritative:
                 calculation_status = "truncated_for_scale"
         if a == b and (not estimate["within_dense_limits"] or self._eigs_algorithm == "sparse"):
-            requested = max(self._num_eigenvalues, (feature_target or 0) + 3)
-            values_np, vectors_np = self._sparse_ordinary_eigenpairs(
+            recovery_target = feature_target or 0
+            if authoritative is not None and authoritative < _SPARSE_BLOCK_MAX_EIGENVALUES:
+                recovery_target = authoritative
+            requested = max(
+                self._num_eigenvalues,
+                min(recovery_target + 3, _SPARSE_BLOCK_MAX_EIGENVALUES),
+            )
+            sparse_result = self._sparse_ordinary_eigenpairs_result(
                 dim,
                 a,
                 requested,
-                return_eigenvectors=True,
                 augment_for_betti=False,
                 eigenvalue_order="SM",
             )
+            values_np = sparse_result.values
+            vectors_np = sparse_result.vectors
         else:
+            sparse_result = None
             values, vectors = self.eigenpairs(dim, a, b)
             values_np = np.asarray(values, dtype=np.float64)
             vectors_np = vectors.detach().cpu().numpy()
@@ -961,6 +1264,24 @@ class Complex:
         tolerance = self._zero_tolerance(values_np)
         harmonic_indices = np.flatnonzero(np.abs(values_np) <= tolerance)
         numerical_nullity = len(harmonic_indices)
+        if (
+            authoritative is not None
+            and numerical_nullity != authoritative
+            and not (
+                calculation_status == "truncated_for_scale" and numerical_nullity == len(values_np)
+            )
+        ):
+            calculation_status = "spectral_nullity_mismatch"
+        elif (
+            sparse_result is not None
+            and authoritative is not None
+            and numerical_nullity == authoritative
+            and not (
+                sparse_result.diagnostics["residuals_pass"]
+                and sparse_result.diagnostics["orthogonality_pass"]
+            )
+        ):
+            calculation_status = "sparse_spectrum_unverified"
         if feature_target is not None:
             harmonic_indices = harmonic_indices[:feature_target]
         simplex_count = self._laplacian_rows(dim, a)
@@ -1000,7 +1321,11 @@ class Complex:
             "betti": authoritative if authoritative is not None else len(features),
             "spectral_nullity": numerical_nullity,
             "returned_features": len(features),
-            "features_complete": authoritative is None or len(features) == authoritative,
+            "features_complete": (
+                (authoritative is None or len(features) == authoritative)
+                and calculation_status
+                not in {"spectral_nullity_mismatch", "sparse_spectrum_unverified"}
+            ),
             "calculation_status": calculation_status,
             "zero_tolerance": tolerance,
             "features": features,

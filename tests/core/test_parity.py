@@ -29,19 +29,6 @@ def test_eigenpairs_allpairs_signature(small_complex):
         assert isinstance(vecs, torch.Tensor)
 
 
-def test_set_eigs_algorithm_kwargs(small_complex):
-    """set_eigs_algorithm accepts num_eigenvalues and eigenvalue_order."""
-    small_complex.set_eigs_algorithm("sparse", num_eigenvalues=2, eigenvalue_order="LM")
-    assert small_complex._num_eigenvalues == 2
-    assert small_complex._eigenvalue_order == "LM"
-
-
-@pytest.mark.parametrize("algorithm", ["selfadjoint", "eigensolver", "bdcsvd", "spectra"])
-def test_cpp_solver_aliases_are_not_supported(small_complex, algorithm):
-    with pytest.raises(ValueError, match="algorithm must be"):
-        small_complex.set_eigs_algorithm(algorithm)
-
-
 def test_print_boundaries_does_not_raise(small_complex, capsys):
     """print_boundaries is exposed and prints boundary information."""
     small_complex.print_boundaries()

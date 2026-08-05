@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.1 - 2026-08-05
+
+### Fixed
+
+- Replaced scalar-ARPACK nullspace recovery with a certified block LOBPCG path
+  for feasible ordinary spectra with repeated zero eigenvalues. Sparse topology
+  summaries now cross-check numerical nullity against Gudhi homology, audit
+  residuals and orthogonality, and never report a least-nonzero eigenvalue when
+  the recovered spectrum is incomplete or unverified.
+
 ## 1.1.0 - 2026-08-04
 
 ### Added
