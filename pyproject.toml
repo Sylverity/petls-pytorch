@@ -31,15 +31,20 @@ dependencies = [
     "gudhi>=3.10.0",
     "pandas>=2.0.0",
     "matplotlib>=3.7.0",
-    "tadasets>=0.2.0",
 ]
 
 [project.optional-dependencies]
+# tadasets is only used by the benchmark harness (benchmark/datasets.py), not by the
+# installed package, so it lives here rather than in the runtime dependencies above.
+benchmark = [
+    "tadasets>=0.2.0",
+]
 dev = [
     "pytest>=7.4.0",
     "pytest-benchmark>=4.0.0",
     "ruff>=0.1.0",
     "mypy>=1.5.0",
+    "tadasets>=0.2.0",
 ]
 
 [project.urls]

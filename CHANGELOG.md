@@ -34,6 +34,8 @@
   recorded in output rows.
 - Benchmark `--dtype` selection defaults to `float32` for continuity with the
   published comparison workload.
+- Moved the benchmark-only `tadasets` dependency from the runtime install to
+  dedicated `benchmark` and development extras.
 - Completed static typing cleanup while retaining Python 3.10 as the minimum
   runtime and analysis target.
 
