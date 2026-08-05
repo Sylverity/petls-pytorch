@@ -393,7 +393,7 @@ class Complex:
         tolerance = self._zero_tolerance(values)
         numerical_nullity = int(np.count_nonzero(np.abs(values) <= tolerance))
         nullity_matches = known_betti is not None and numerical_nullity == known_betti
-        epsilon = np.finfo(np.float64).eps
+        epsilon = float(np.finfo(np.float64).eps)
         residual_limit = max(
             1_000.0 * epsilon,
             self.zero_rtol * 0.1,
@@ -495,7 +495,7 @@ class Complex:
 
         initial = np.random.default_rng(0).standard_normal((rows, requested))
         initial, _ = np.linalg.qr(initial, mode="reduced")
-        epsilon = np.finfo(np.float64).eps
+        epsilon = float(np.finfo(np.float64).eps)
         solver_tolerance = max(
             100.0 * epsilon * operator_scale,
             0.1 * min(self.zero_atol, self.zero_rtol * operator_scale),
