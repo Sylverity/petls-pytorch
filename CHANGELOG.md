@@ -4,6 +4,13 @@
 
 ### Highlights
 
+- Added weighted Gudhi alpha complexes with general power weights, negative
+  vertex births, construction cutoffs, point labels, and retained simplex
+  identities.
+- Added first-class Gudhi-backed topology and persistence summaries plus
+  simplex-mapped harmonic representatives.
+- Added dense-allocation guards and a genuinely sparse ordinary Hodge
+  lowest-spectrum path for larger complexes.
 - Improved PETLS-PyTorch benchmark performance on the Windows standard preset
   while preserving API compatibility.
 - The standard benchmark now completes every sampled row by default, including
@@ -21,6 +28,13 @@
 
 ### Changed
 
+- Filtration enumeration now includes complete zero-dimensional births and can
+  merge nearly equal scales with a configurable tolerance.
+- Device, dtype, and scale-aware eigenvalue zero tolerances are configurable per
+  object. CPU is now the safe default; CUDA auto-selection is opt-in.
+- Dense persistent spectra are bounded by configurable row and byte limits;
+  oversized summaries can retain Gudhi homology with explicit
+  `homology_only` status.
 - Made benchmark timing fairer and more explicit: package import/device warmup
   is excluded from complex-build timing, CUDA runs synchronize around timed
   regions, and PETLS/PETLS-PyTorch eigensolve timing now solves an already-built

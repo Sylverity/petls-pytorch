@@ -43,7 +43,7 @@ class sheaf_simplex_tree:
 
         # Give each simplex a unique index
         index = 0
-        indices = {}
+        indices: dict[tuple[int, ...], int] = {}
         for simplex_with_filtration in self.st.get_filtration():
             indices[tuple(simplex_with_filtration[0])] = index
             index += 1
@@ -71,8 +71,8 @@ class sheaf_simplex_tree:
         filtrations : list[list[float]]
             Filtration values per dimension.
         """
-        coboundaries_triples = [[] for _ in range(self.complex_dim)]
-        filtrations = [[] for _ in range(self.complex_dim + 1)]
+        coboundaries_triples: list[list[list[float]]] = [[] for _ in range(self.complex_dim)]
+        filtrations: list[list[float]] = [[] for _ in range(self.complex_dim + 1)]
 
         for simplex_with_filtration in self.st.get_filtration():
             simplex = simplex_with_filtration[0]
@@ -145,6 +145,12 @@ class PersistentSheafLaplacian(Complex):
         boundaries=None,
         filtrations=None,
         device=None,
+        dtype=None,
+        zero_atol: float = 1e-8,
+        zero_rtol: float = 1e-7,
+        max_matrix_rows: int | None = 12_000,
+        max_matrix_bytes: int | None = 4_000_000_000,
+        on_oversize: str = "raise",
     ):
         if sst is not None:
             coboundaries, filtrations = sst.apply_restriction_function()
@@ -154,4 +160,14 @@ class PersistentSheafLaplacian(Complex):
                 "PersistentSheafLaplacian requires either a sheaf_simplex_tree "
                 "or both boundaries and filtrations."
             )
-        super().__init__(boundaries=boundaries, filtrations=filtrations, device=device)
+        super().__init__(
+            boundaries=boundaries,
+            filtrations=filtrations,
+            device=device,
+            dtype=dtype,
+            zero_atol=zero_atol,
+            zero_rtol=zero_rtol,
+            max_matrix_rows=max_matrix_rows,
+            max_matrix_bytes=max_matrix_bytes,
+            on_oversize=on_oversize,
+        )

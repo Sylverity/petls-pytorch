@@ -13,7 +13,8 @@ from scipy.sparse import coo_matrix
 def simplex_tree_boundaries_filtrations(
     simplex_tree,
     sign_convention: str = "python",
-) -> tuple[list[coo_matrix], list[list[float]]]:
+    return_simplices: bool = False,
+):
     """Extract sparse boundary matrices and per-dimension filtrations from a Gudhi simplex tree.
 
     Parameters
@@ -37,57 +38,44 @@ def simplex_tree_boundaries_filtrations(
     if sign_convention not in ("python", "cpp"):
         raise ValueError("sign_convention must be 'python' or 'cpp'")
 
-    indices = {}
-    for simplex, filtration in simplex_tree.get_filtration():
-        indices[tuple(simplex)] = len(indices)
-
     max_dim = simplex_tree.dimension()
-
-    boundaries_triples = [[] for _ in range(max_dim + 1)]
-    filtrations = [[] for _ in range(max_dim + 1)]
+    if max_dim < 0:
+        if return_simplices:
+            return [], [[]], [[]]
+        return [], [[]]
+    filtrations: list[list[float]] = [[] for _ in range(max_dim + 1)]
+    simplices: list[list[tuple[int, ...]]] = [[] for _ in range(max_dim + 1)]
 
     for simplex, filtration in simplex_tree.get_filtration():
         dim = len(simplex) - 1
-        filtrations[dim].append(filtration)
+        simplices[dim].append(tuple(int(vertex) for vertex in simplex))
+        filtrations[dim].append(float(filtration))
 
-        if dim == 0:
-            continue
+    index_mappings = [
+        {simplex: index for index, simplex in enumerate(simplices_dim)}
+        for simplices_dim in simplices
+    ]
 
-        if sign_convention == "cpp":
-            sign = 1 - 2 * (dim % 2)
-        else:
-            sign = 1
-
-        for face, _ in simplex_tree.get_boundaries(simplex):
-            boundaries_triples[dim].append([indices[tuple(face)], indices[tuple(simplex)], sign])
-            sign = -sign
-
-    index_mappings = [{} for _ in range(max_dim + 1)]
-
-    for dim in range(max_dim):
-        face_set = set(triple[0] for triple in boundaries_triples[dim + 1])
-        simplex_set = set(triple[1] for triple in boundaries_triples[dim])
-        actual = sorted(list(face_set | simplex_set))
-        for i, idx in enumerate(actual):
-            index_mappings[dim][idx] = i
-
-    top_set = set(triple[1] for triple in boundaries_triples[max_dim])
-    for i, idx in enumerate(sorted(list(top_set))):
-        index_mappings[max_dim][idx] = i
-
-    boundaries = []
+    boundaries: list[coo_matrix] = []
     for dim in range(1, max_dim + 1):
-        rows = []
-        cols = []
-        data = []
-        for triple in boundaries_triples[dim]:
-            rows.append(index_mappings[dim - 1][triple[0]])
-            cols.append(index_mappings[dim][triple[1]])
-            data.append(triple[2])
+        rows: list[int] = []
+        cols: list[int] = []
+        data: list[int] = []
+        for col, simplex in enumerate(simplices[dim]):
+            # Gudhi returns codimension-one faces in its own stable order.
+            # Keeping that order preserves the historical PETLS sign choice.
+            sign = 1 - 2 * (dim % 2) if sign_convention == "cpp" else 1
+            for face, _ in simplex_tree.get_boundaries(list(simplex)):
+                rows.append(index_mappings[dim - 1][tuple(face)])
+                cols.append(col)
+                data.append(sign)
+                sign = -sign
 
-        n_rows = len(index_mappings[dim - 1])
-        n_cols = len(index_mappings[dim])
+        n_rows = len(simplices[dim - 1])
+        n_cols = len(simplices[dim])
         B = coo_matrix((data, (rows, cols)), shape=(n_rows, n_cols), dtype=np.float32)
         boundaries.append(B)
 
+    if return_simplices:
+        return boundaries, filtrations, simplices
     return boundaries, filtrations

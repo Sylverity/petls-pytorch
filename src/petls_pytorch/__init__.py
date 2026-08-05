@@ -6,13 +6,14 @@ but is implemented entirely in Python with PyTorch tensors.
 """
 
 import enum
+from typing import cast
 
 import numpy as np
 from scipy.linalg import eigvalsh
 from scipy.sparse import coo_matrix
 
 from petls_pytorch._config import get_device, get_dtype, set_device, set_dtype
-from petls_pytorch.core.complex import Complex
+from petls_pytorch.core.complex import Complex, LaplacianSizeError
 from petls_pytorch.core.profile import Profile, Timer
 
 from petls_pytorch.variants.alpha import Alpha
@@ -47,7 +48,7 @@ def eigvalsh_wrapper(L: np.ndarray) -> np.ndarray:
     """Wrapper around scipy.linalg.eigvalsh with diagonal short-circuit."""
     if matrix_is_diagonal(L):
         return np.array(sorted(np.diag(L)))
-    return eigvalsh(L)
+    return cast(np.ndarray, eigvalsh(L))
 
 
 def sparse_wrapper(
@@ -73,20 +74,21 @@ def sparse_wrapper(
         if which_eigs in ("SM", "SA"):
             return np.array(all_eigs[:num_eigs])
         elif which_eigs in ("LM", "LA"):
-            return all_eigs[-num_eigs:]
+            return cast(np.ndarray, all_eigs[-num_eigs:])
         elif which_eigs == "BE":
             lowest = all_eigs[: num_eigs // 2]
             if num_eigs % 2 == 1:
                 highest = all_eigs[-(num_eigs // 2 + 1) :]
             else:
                 highest = all_eigs[-(num_eigs // 2) :]
-            return np.concatenate((lowest, highest))
+            return cast(np.ndarray, np.concatenate((lowest, highest)))
         else:
-            return all_eigs
+            return cast(np.ndarray, all_eigs)
 
 
 __all__ = [
     "Complex",
+    "LaplacianSizeError",
     "Profile",
     "Timer",
     "get_device",

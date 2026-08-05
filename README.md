@@ -22,6 +22,9 @@ remains the reference for correctness.
 ## Contents
 
 - [Quick Start](#quick-start)
+- [Weighted Alpha Complexes](#weighted-alpha-complexes)
+- [Topology and Simplex Inspection](#topology-and-simplex-inspection)
+- [Numerical and Scaling Controls](#numerical-and-scaling-controls)
 - [Relationship to PETLS](#relationship-to-petls)
 - [API Coverage](#api-coverage)
 - [Directed Flag Files](#directed-flag-files)
@@ -37,6 +40,7 @@ remains the reference for correctness.
 ```python
 import petls_pytorch
 import gudhi
+import torch
 
 # Alpha complex from point cloud
 alpha = petls_pytorch.Alpha(points=[[0, 0], [1, 0], [0.5, 1]], max_dim=2)
@@ -68,6 +72,114 @@ sheaf_eigs = psl.spectra(dim=0, a=filtrations[0], b=filtrations[-1])
 
 For `spectra(dim, a, b)`, choose `a` and `b` from the filtration values in
 `psl.get_all_filtrations()` with `a <= b`.
+
+## Weighted Alpha Complexes
+
+`Alpha` accepts Gudhi power weights directly. A weight is a finite scalar
+associated with a point; PETLS does not assign domain-specific meaning to it.
+Callers are responsible for deriving weights appropriate to their application.
+
+```python
+alpha = petls_pytorch.Alpha(
+    points=positions,
+    weights=power_weights,
+    max_dim=3,
+    precision="safe",
+    max_alpha_square=maximum_scale,
+    point_labels=labels,  # optional; kept separate from topology
+    device="cpu",
+    dtype=torch.float64,
+    zero_atol=1e-8,
+    zero_rtol=1e-7,
+)
+```
+
+The constructor validates point and weight shapes and finite values. Weighted
+vertex births, including negative filtration values, are retained. The
+`max_alpha_square` cutoff is passed to Gudhi during construction so simplices
+beyond the analysis range are never built. Passing no weights retains ordinary
+unweighted-alpha behavior.
+
+Filtration enumeration includes real vertex births and merges numerical
+near-duplicates by default:
+
+```python
+scales = alpha.get_all_filtrations(
+    merge_tolerance=1e-10,
+    include_vertex_filtrations=True,
+)
+```
+
+Use `include_vertex_filtrations=False` only when reproducing workflows that
+intentionally ignore zero-dimensional birth scales.
+
+## Topology and Simplex Inspection
+
+Complexes constructed from Gudhi retain `simplex_tree`,
+`simplices_by_dimension`, `simplex_filtrations`, and `simplex_to_index`.
+Consequently, every Laplacian row and eigenvector coordinate has a stable
+simplex identity. If `point_labels` are supplied to `Alpha`, corresponding
+label tuples are available in `simplex_labels_by_dimension` and harmonic
+feature results.
+
+```python
+summary = alpha.topology_summary(dimensions=(0, 1, 2), a=0.0, b=0.0)
+intervals = alpha.persistence_intervals(dim=1)
+bettis = alpha.betti_numbers_at(scale=0.0)
+rank = alpha.persistent_betti(dim=1, birth_scale=0.0, death_scale=0.5)
+features = alpha.harmonic_features(dim=1, a=0.0, b=0.0)
+```
+
+At `a == b`, `topology_summary()` reports ordinary Betti numbers. At `a < b`,
+it reports persistent Betti numbers. Gudhi persistence is the authoritative
+homology source when available; persistent-Laplacian nullity, least nonzero
+eigenvalues, the effective zero tolerance, smallest eigenvalues, matrix rows,
+cost estimates, and per-dimension calculation status are returned separately
+for numerical auditing.
+
+`harmonic_features()` returns each numerical zero-mode eigenvector as
+simplex/coefficient records. Harmonic bases need not be unique, but their
+coordinates always follow the retained simplex order. On an oversized complex,
+the method caps automatic localization at ten representatives and reports
+`truncated_for_scale`; pass `max_features=` to request a different explicit
+limit.
+
+## Numerical and Scaling Controls
+
+Device and dtype are object-specific. The library default device is CPU;
+`device="auto"` opts in to CUDA when available, and `device="cuda"` requests it
+explicitly. Constructing one object never changes another object's placement.
+Weighted `Alpha` defaults to `torch.float64`; callers can select `float32` or
+`float64` explicitly on all primary complex variants.
+
+Zero eigenvalues use the scale-aware test
+`abs(lambda) <= zero_atol + zero_rtol * max(abs(spectrum))`. Summary results
+report the effective tolerance and smallest eigenvalues so borderline modes can
+be inspected.
+
+Dense allocations are guarded before construction. The defaults are 12,000
+rows and 4 GB per Laplacian, and both are configurable per object:
+
+```python
+estimate = alpha.estimate_laplacian(dim=1, a=0.0, b=0.0)
+
+guarded = petls_pytorch.Alpha(
+    points=positions,
+    weights=power_weights,
+    max_matrix_rows=12_000,
+    max_matrix_bytes=4_000_000_000,
+    on_oversize="homology_only",  # or "raise"
+)
+```
+
+`ordinary_spectrum(dim, scale, num_eigenvalues)` builds sparse boundary Gram
+matrices and calls SciPy's sparse symmetric eigensolver without first creating
+a dense Laplacian. The same path is used by `spectra()` for `a == b` after
+`set_eigs_algorithm("sparse", ...)`. Persistent Schur complements can become
+dense, so oversized `a < b` requests either raise `LaplacianSizeError` or return
+Gudhi homology-only status through `topology_summary()`. This distinction is
+intentional: large systems retain authoritative homology and ordinary sparse
+Hodge spectra without pretending that full persistent spectra are sparse.
 
 ## Relationship to PETLS
 
@@ -102,6 +214,12 @@ implementation is included in this repository.
 | `nonzero_spectra()` | `nonzero_spectra()` | Implemented |
 | `store_L()`, `store_spectra()`, `store_spectra_summary()` | Same | Implemented |
 | `time_to_csv()` | `time_to_csv()` | Implemented |
+| Weighted alpha / power weights | `Alpha(weights=..., max_alpha_square=...)` | Implemented |
+| Gudhi persistence inspection | `persistence_intervals()`, `betti_numbers_at()`, `persistent_betti()` | Implemented |
+| Topology result object | `topology_summary()` | Implemented |
+| Harmonic localization | `harmonic_features()` + simplex mappings | Implemented |
+| Allocation safeguards | `estimate_laplacian()` + row/byte guards | Implemented |
+| Sparse ordinary low spectrum | `ordinary_spectrum()` | Implemented |
 
 ## Directed Flag Files
 

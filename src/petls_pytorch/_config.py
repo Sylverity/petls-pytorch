@@ -4,10 +4,11 @@ Global configuration for PETLS PyTorch backend.
 All modules should read from here rather than hard-coding device/dtype.
 """
 
-import torch
-from typing import Union
+from typing import Union, cast
 
-_DEFAULT_DEVICE: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+import torch
+
+_DEFAULT_DEVICE: torch.device = torch.device("cpu")
 _DEFAULT_DTYPE: torch.dtype = torch.float32
 _DEFAULT_SPARSE_DTYPE: torch.dtype = torch.float32
 
@@ -36,6 +37,37 @@ def get_tol() -> tuple[float, float]:
     return _ATOL, _RTOL
 
 
+def resolve_device(device: str | torch.device | None) -> torch.device:
+    """Resolve an object-local device without changing global configuration.
+
+    ``None`` uses the configured default, while ``"auto"`` opts in to CUDA
+    when it is available.  The package default is deliberately CPU so merely
+    constructing a PETLS object never claims a GPU unexpectedly.
+    """
+    if device is None:
+        return get_device()
+    if isinstance(device, str) and device == "auto":
+        return torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    resolved = torch.device(device)
+    if resolved.type == "cuda" and resolved.index is None:
+        return torch.device("cuda:0")
+    return resolved
+
+
+def resolve_dtype(dtype: str | torch.dtype | None) -> torch.dtype:
+    """Resolve an object-local floating-point dtype."""
+    if dtype is None:
+        return get_dtype()
+    if isinstance(dtype, str):
+        try:
+            dtype = cast(torch.dtype, getattr(torch, dtype))
+        except AttributeError as exc:
+            raise ValueError(f"Unknown torch dtype: {dtype!r}") from exc
+    if dtype not in (torch.float32, torch.float64):
+        raise ValueError("PETLS supports torch.float32 and torch.float64")
+    return dtype
+
+
 def set_device(device: Union[str, torch.device]) -> None:
     """Set the default compute device globally."""
     global _DEFAULT_DEVICE
@@ -49,7 +81,7 @@ def set_dtype(dtype: Union[str, torch.dtype]) -> None:
     """Set the default dtype for dense tensors globally."""
     global _DEFAULT_DTYPE
     if isinstance(dtype, str):
-        dtype = getattr(torch, dtype)
+        dtype = cast(torch.dtype, getattr(torch, dtype))
     _DEFAULT_DTYPE = dtype
 
 
@@ -57,7 +89,7 @@ def set_sparse_dtype(dtype: Union[str, torch.dtype]) -> None:
     """Set the default dtype for sparse tensors globally."""
     global _DEFAULT_SPARSE_DTYPE
     if isinstance(dtype, str):
-        dtype = getattr(torch, dtype)
+        dtype = cast(torch.dtype, getattr(torch, dtype))
     _DEFAULT_SPARSE_DTYPE = dtype
 
 
