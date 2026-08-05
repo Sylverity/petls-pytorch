@@ -218,9 +218,24 @@ guarded = petls_pytorch.Alpha(
 matrices and calls SciPy's sparse symmetric eigensolver without first creating
 a dense Laplacian. The same path is used by `spectra()` for `a == b` after
 `set_eigs_algorithm("sparse", ..., eigenvalue_order="SM")`; `SM`, `SA`, `LM`,
-`LA`, and `BE` selection is honored consistently. Persistent Schur complements
-can become dense, so oversized `a < b` requests either raise
-`LaplacianSizeError` or return Gudhi homology-only status through
+`LA`, and `BE` selection is honored consistently.
+
+For an ordinary lowest-spectrum summary backed by a Gudhi simplex tree, PETLS
+uses the authoritative Betti number to size a block eigensolve. This is
+important when the zero eigenvalue is highly degenerate: scalar ARPACK can
+return converged positive eigenpairs without recovering every independent zero
+mode. PETLS uses block LOBPCG for feasible repeated kernels, checks normalized
+residuals and eigenvector orthogonality, and reports a spectral gap only when
+the numerical nullity agrees with Gudhi homology. The summary exposes
+`spectrum_solver`, `spectrum_certified`, and
+`spectrum_max_normalized_residual` for auditing. If recovery is incomplete or
+cannot be certified, `least_nonzero_eigenvalue` is `None` and
+`calculation_status` is `spectral_nullity_mismatch`,
+`sparse_spectrum_unverified`, `sparse_null_modes_only`, or
+`sparse_solver_failed` as appropriate.
+
+Persistent Schur complements can become dense, so oversized `a < b` requests
+either raise `LaplacianSizeError` or return Gudhi homology-only status through
 `topology_summary()`. This distinction is intentional: large systems retain
 authoritative homology and ordinary sparse Hodge spectra without pretending
 that full persistent spectra are sparse.

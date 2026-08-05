@@ -33,6 +33,17 @@ def _growing_chain_tree(count: int = 10) -> gudhi.SimplexTree:
     return tree
 
 
+def _disconnected_chains_tree(components: int, vertices_per_component: int) -> gudhi.SimplexTree:
+    tree = gudhi.SimplexTree()
+    for component in range(components):
+        start = component * vertices_per_component
+        for vertex in range(start, start + vertices_per_component):
+            tree.insert([vertex], filtration=0.0)
+        for vertex in range(start, start + vertices_per_component - 1):
+            tree.insert([vertex, vertex + 1], filtration=0.0)
+    return tree
+
+
 def test_weight_validation_and_finite_inputs():
     points = _ring(4)
     with pytest.raises(ValueError, match=r"len\(weights\)"):
@@ -318,6 +329,94 @@ def test_sparse_ordinary_spectrum_honors_order(
     )
 
     assert complex_.ordinary_spectrum(0, 0.0, count) == expected
+
+
+def test_sparse_summary_recovers_and_certifies_repeated_nullspace():
+    component_count = 17
+    vertices_per_component = 30
+    complex_ = Complex(
+        simplex_tree=_disconnected_chains_tree(component_count, vertices_per_component),
+        dtype=torch.float64,
+        eigs_algorithm="sparse",
+    )
+    complex_.set_eigs_algorithm("sparse", num_eigenvalues=20)
+
+    summary = complex_.topology_summary(
+        dimensions=(0,),
+        a=0.0,
+        b=0.0,
+        smallest_eigenvalues=20,
+    )
+
+    expected_gap = 2.0 - 2.0 * math.cos(math.pi / vertices_per_component)
+    assert summary["betti"][0] == component_count
+    assert summary["spectral_nullity"][0] == component_count
+    assert summary["least_nonzero_eigenvalue"][0] == pytest.approx(expected_gap, rel=1e-7)
+    assert summary["calculation_status"][0] == "sparse_lowest_spectrum"
+    assert summary["spectrum_solver"][0] == "lobpcg"
+    assert summary["spectrum_certified"][0] is True
+    assert summary["spectrum_max_normalized_residual"][0] <= 1e-8
+
+
+def test_sparse_summary_never_reports_gap_when_arpack_misses_null_modes(monkeypatch):
+    import scipy.sparse.linalg
+
+    complex_ = Complex(
+        simplex_tree=_disconnected_chains_tree(17, 30),
+        dtype=torch.float64,
+        eigs_algorithm="sparse",
+    )
+    complex_.set_eigs_algorithm("sparse", num_eigenvalues=20)
+    monkeypatch.setattr(complex_, "_block_lowest_eigenpairs", lambda *args: None)
+
+    def incomplete_scalar_spectrum(matrix, k, which, return_eigenvectors):
+        assert k == 20
+        assert which == "SM"
+        assert return_eigenvectors
+        values = np.concatenate((np.zeros(7), np.linspace(0.05, 0.2, 13)))
+        vectors = np.eye(matrix.shape[0], k)
+        return values, vectors
+
+    monkeypatch.setattr(scipy.sparse.linalg, "eigsh", incomplete_scalar_spectrum)
+
+    summary = complex_.topology_summary(dimensions=(0,), a=0.0, b=0.0)
+
+    assert summary["betti"][0] == 17
+    assert summary["spectral_nullity"][0] == 7
+    assert summary["least_nonzero_eigenvalue"][0] is None
+    assert summary["calculation_status"][0] == "spectral_nullity_mismatch"
+    assert summary["spectrum_solver"][0] == "arpack"
+    assert summary["spectrum_certified"][0] is False
+
+
+def test_sparse_summary_returns_explicit_status_when_all_sparse_solvers_fail(monkeypatch):
+    import scipy.sparse.linalg
+
+    complex_ = Complex(
+        simplex_tree=_disconnected_chains_tree(17, 30),
+        dtype=torch.float64,
+        eigs_algorithm="sparse",
+    )
+    complex_.set_eigs_algorithm("sparse", num_eigenvalues=20)
+    monkeypatch.setattr(complex_, "_block_lowest_eigenpairs", lambda *args: None)
+
+    def fail_scalar_spectrum(*args, **kwargs):
+        raise scipy.sparse.linalg.ArpackNoConvergence(
+            "no convergence",
+            np.empty(0),
+            np.empty((510, 0)),
+        )
+
+    monkeypatch.setattr(scipy.sparse.linalg, "eigsh", fail_scalar_spectrum)
+
+    summary = complex_.topology_summary(dimensions=(0,), a=0.0, b=0.0)
+
+    assert summary["betti"][0] == 17
+    assert summary["spectral_nullity"][0] is None
+    assert summary["least_nonzero_eigenvalue"][0] is None
+    assert summary["calculation_status"][0] == "sparse_solver_failed"
+    assert summary["spectrum_solver"][0] == "arpack"
+    assert summary["spectrum_certified"][0] is False
 
 
 def test_oversized_harmonic_features_have_explicit_ordinary_and_persistent_behavior():
