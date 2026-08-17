@@ -4,7 +4,7 @@ Laplacian construction: get_up, get_down, get_L.
 GPU-native implementations of the persistent Laplacian formulas:
   L_down^{dim}(a)  = B_{dim}^a^T @ B_{dim}^a
   L_up^{dim}(a,b)  = Schur complement on B_{dim+1}
-  L^{dim}(a,b)     = L_up + L_down   (except edge cases dim=0 and dim=top_dim)
+  L^{dim}(a,b)     = L_up + L_down   (using the available boundary terms)
 
 Reference: Memoli, Wan, Wang 2020 (Schur complement algorithm).
 """
@@ -64,12 +64,14 @@ def _laplacian_rows(
     filtered_boundaries: list[FilteredBoundaryMatrix],
     top_dim: int,
 ) -> int:
+    if dim < 0:
+        raise ValueError("dim must be non-negative")
+    if dim > top_dim or dim >= len(filtered_boundaries):
+        return 0
     if dim == 0:
-        if top_dim == 0:
+        if len(filtered_boundaries) == 1:
             return filtered_boundaries[0].index_of_filtration(True, a) + 1
         return filtered_boundaries[1].index_of_filtration(False, a) + 1
-    if dim > top_dim:
-        return 0
     return filtered_boundaries[dim].index_of_filtration(True, a) + 1
 
 
@@ -238,10 +240,10 @@ def get_L(
     """
     Compute the persistent Laplacian L^{dim}(a,b) = L_up + L_down.
 
-    Handles edge cases:
-      dim == 0       → L = L_up only
-      dim == top_dim → L = L_down only
-      dim > top_dim  → empty matrix
+    The public ``top_dim`` limits which dimensions may be queried, while the
+    retained boundary list determines whether each dimension has up and down
+    terms. This allows Rips complexes to retain one hidden simplex dimension
+    for a correct top-dimensional up-Laplacian.
     """
     target_device = (
         device
@@ -273,20 +275,19 @@ def get_L(
                 )
                 return L_cpu.to(device=target_device, dtype=dtype)
 
-    if dim == 0 and top_dim == 0:
+    if dim == 0 and len(filtered_boundaries) == 1:
         return torch.zeros(l_rows, l_rows, dtype=dtype, device=target_device)
 
-    if dim == 0:
-        return get_up(filtered_boundaries[1], a, b, target_device, dtype)
-
-    if dim == top_dim:
-        return get_down(filtered_boundaries[top_dim], a, target_device, dtype)
-
-    if dim > top_dim:
-        return torch.empty(0, 0, dtype=dtype, device=target_device)
-
-    L_up = get_up(filtered_boundaries[dim + 1], a, b, target_device, dtype)
-    L_down = get_down(filtered_boundaries[dim], a, target_device, dtype)
+    L_up = (
+        get_up(filtered_boundaries[dim + 1], a, b, target_device, dtype)
+        if dim + 1 < len(filtered_boundaries)
+        else torch.zeros(l_rows, l_rows, dtype=dtype, device=target_device)
+    )
+    L_down = (
+        get_down(filtered_boundaries[dim], a, target_device, dtype)
+        if dim > 0
+        else torch.zeros(l_rows, l_rows, dtype=dtype, device=target_device)
+    )
 
     if L_up.numel() == 0:
         return L_down

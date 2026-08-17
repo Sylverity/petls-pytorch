@@ -63,12 +63,11 @@ def _pad_to_max_dim(
     filtrations: list[list[float]],
     max_dim: int,
 ) -> tuple[list, list[list[float]]]:
-    """Pad boundaries and filtrations so that top_dim == max_dim.
+    """Pad boundaries and filtrations through the requested analysis dimension.
 
-    The original C++ Rips class always creates empty boundary matrices and
-    empty filtration lists for dimensions that have no simplices. This ensures
-    ``spectra()`` returns entries like ``(dim, a, a, [])`` for every
-    ``dim <= max_dim``.
+    Rips may retain one additional simplex dimension internally so the
+    top-dimensional Laplacian includes its up term. Padding still guarantees
+    that every public dimension through ``max_dim`` has a boundary slot.
     """
     # Pad filtrations up to max_dim
     while len(filtrations) <= max_dim:
@@ -101,7 +100,9 @@ class Rips(Complex):
     distances : array-like, optional
         Dense symmetric distance matrix.
     max_dim : int, optional
-        Maximum simplex dimension (default 3).
+        Highest homology/Laplacian dimension reported by the public API
+        (default 3). One additional simplex dimension may be retained
+        internally to compute its up-Laplacian.
     threshold : float, optional
         Max edge length. If ``None``, uses infinity.
     device : torch.device, optional
@@ -138,6 +139,9 @@ class Rips(Complex):
                 "Gudhi is required for Rips complex construction. "
                 "Install it with: pip install gudhi"
             ) from exc
+
+        if max_dim < 0:
+            raise ValueError("max_dim must be non-negative")
 
         if filename is not None:
             distances = _read_lower_distance_matrix(filename)
@@ -188,3 +192,5 @@ class Rips(Complex):
             on_oversize=on_oversize,
             eigs_algorithm=eigs_algorithm,
         )
+        self.max_dim = max_dim
+        self.top_dim = min(max_dim, self._boundary_top_dim)

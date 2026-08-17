@@ -11,6 +11,8 @@ import torch
 from benchmark.datasets import generate_dataset
 from benchmark.runner import BenchmarkRunner
 
+pytestmark = pytest.mark.benchmark
+
 
 @pytest.mark.parametrize("complex_type", ["alpha", "rips"])
 def test_generate_dataset_passes_device_and_dtype(complex_type):

@@ -125,3 +125,73 @@ def test_persistent_sheaf_laplacian():
     np.testing.assert_allclose(psl.get_L(0, 5, 5).cpu().numpy(), expected_L0, rtol=1e-4)
     np.testing.assert_allclose(psl.get_L(1, 5, 5).cpu().numpy(), expected_L1, rtol=1e-4)
     np.testing.assert_allclose(psl.get_L(2, 5, 5).cpu().numpy(), expected_L2, rtol=1e-4)
+
+
+def test_sheaf_cochains_preserve_isolated_and_zero_restriction_simplices():
+    """Cochain coordinates follow all simplex lists, not only nonzero maps."""
+
+    def make_edge_isolated_tree(reverse_insertion: bool = False):
+        st = gudhi.SimplexTree()
+        entries = [
+            ([0], 0.0),
+            ([1], 0.0),
+            ([2], 0.0),
+            ([0, 1], 1.0),
+        ]
+        if reverse_insertion:
+            entries.reverse()
+        for simplex, filtration in entries:
+            st.insert(simplex, filtration=filtration)
+        return st
+
+    def unit_restriction(simplex, coface, sst):
+        return 1.0
+
+    def zero_restriction(simplex, coface, sst):
+        return 0.0
+
+    def assert_cochain_shapes(sst, coboundaries, filtrations):
+        assert len(filtrations) == sst.complex_dim + 1
+        assert len(coboundaries) == sst.complex_dim
+        for dim, coboundary in enumerate(coboundaries):
+            assert coboundary.shape == (
+                len(filtrations[dim + 1]),
+                len(filtrations[dim]),
+            )
+
+    sst = sheaf_simplex_tree(make_edge_isolated_tree(), {}, unit_restriction)
+    coboundaries, filtrations = sst.apply_restriction_function()
+    assert_cochain_shapes(sst, coboundaries, filtrations)
+    assert coboundaries[0].shape == (1, 3)
+
+    laplacian = PersistentSheafLaplacian(sst).get_L(0, 1.0, 1.0).cpu().numpy()
+    assert laplacian.shape == (3, 3)
+    np.testing.assert_allclose(laplacian @ np.array([0.0, 0.0, 1.0]), 0.0)
+
+    zero_sst = sheaf_simplex_tree(make_edge_isolated_tree(), {}, zero_restriction)
+    zero_coboundaries, zero_filtrations = zero_sst.apply_restriction_function()
+    assert_cochain_shapes(zero_sst, zero_coboundaries, zero_filtrations)
+    assert not np.any(zero_coboundaries[0])
+    np.testing.assert_allclose(
+        PersistentSheafLaplacian(zero_sst).get_L(0, 1.0, 1.0).cpu().numpy(),
+        np.zeros((3, 3)),
+    )
+
+    vertex_tree = gudhi.SimplexTree()
+    vertex_tree.insert([0], filtration=2.0)
+    vertex_tree.insert([1], filtration=0.0)
+    vertex_tree.insert([2], filtration=1.0)
+    vertex_sst = sheaf_simplex_tree(vertex_tree, {}, zero_restriction)
+    vertex_coboundaries, vertex_filtrations = vertex_sst.apply_restriction_function()
+    assert_cochain_shapes(vertex_sst, vertex_coboundaries, vertex_filtrations)
+    assert vertex_coboundaries == []
+    assert PersistentSheafLaplacian(vertex_sst).get_L(0, 2.0, 2.0).shape == (3, 3)
+
+    repeated = sheaf_simplex_tree(
+        make_edge_isolated_tree(reverse_insertion=True), {}, unit_restriction
+    )
+    repeated_coboundaries, repeated_filtrations = repeated.apply_restriction_function()
+    assert sst.simplices_by_dimension == repeated.simplices_by_dimension
+    assert filtrations == repeated_filtrations
+    for first, second in zip(coboundaries, repeated_coboundaries):
+        np.testing.assert_array_equal(first, second)

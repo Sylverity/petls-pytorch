@@ -8,6 +8,7 @@ computations to :class:`petls_pytorch.core.complex.Complex`.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -16,11 +17,21 @@ import torch
 from petls_pytorch.core.complex import Complex
 
 
-def _read_flag_file(path: str) -> np.ndarray:
-    """Parse a weighted ``.flag`` file and return a dense adjacency matrix.
+@dataclass(frozen=True)
+class _FlagData:
+    """Parsed weighted directed graph with explicit edge presence."""
 
-    Diagonal entries store vertex weights; off-diagonal entries store directed
-    edge weights. Missing edges are represented by ``0``.
+    vertex_weights: np.ndarray
+    edge_weights: np.ndarray
+    edge_present: np.ndarray
+
+
+def _read_flag_file(path: str) -> _FlagData:
+    """Parse a weighted ``.flag`` file without conflating absent and zero edges.
+
+    ``edge_present`` records whether a directed edge appeared in the file;
+    ``edge_weights`` may therefore contain the default value ``0`` for absent
+    edges without changing the graph. All parsed weights must be finite.
     """
     lines = []
     for raw_line in Path(path).read_text().splitlines():
@@ -41,12 +52,15 @@ def _read_flag_file(path: str) -> np.ndarray:
 
     if not vertices:
         raise ValueError(".flag file must contain at least one vertex weight")
+    vertex_weights = np.asarray(vertices, dtype=np.float64)
+    if not np.isfinite(vertex_weights).all():
+        raise ValueError("Vertex weights in .flag file must be finite")
 
-    adj = np.zeros((len(vertices), len(vertices)), dtype=np.float64)
-    np.fill_diagonal(adj, vertices)
+    edge_weights = np.zeros((len(vertices), len(vertices)), dtype=np.float64)
+    edge_present = np.zeros((len(vertices), len(vertices)), dtype=bool)
 
     if len(lines) == 2:
-        return adj
+        return _FlagData(vertex_weights, edge_weights, edge_present)
     if not _is_dim_header(lines[2], 1):
         raise ValueError(".flag edge list must be preceded by a 'dim 1' header")
 
@@ -66,9 +80,14 @@ def _read_flag_file(path: str) -> np.ndarray:
             raise ValueError(f"Self-loops are not supported in .flag files: line {line_number}")
         if src < 0 or src >= len(vertices) or dst < 0 or dst >= len(vertices):
             raise ValueError(f".flag edge endpoint out of range on line {line_number}")
-        adj[src, dst] = weight
+        if not np.isfinite(weight):
+            raise ValueError(f".flag edge weight must be finite on line {line_number}")
+        if edge_present[src, dst]:
+            raise ValueError(f"Duplicate .flag edge declaration on line {line_number}")
+        edge_weights[src, dst] = weight
+        edge_present[src, dst] = True
 
-    return adj
+    return _FlagData(vertex_weights, edge_weights, edge_present)
 
 
 def _is_dim_header(line: str, dim: int) -> bool:
@@ -77,7 +96,7 @@ def _is_dim_header(line: str, dim: int) -> bool:
     return normalized == f"dim{dim}"
 
 
-def _enumerate_directed_simplices(adj: np.ndarray, max_dim: int):
+def _enumerate_directed_simplices(graph: _FlagData, max_dim: int):
     """Enumerate all directed simplices in the graph.
 
     A *k*-simplex is an ordered tuple ``(v0, v1, ..., vk)`` such that a directed
@@ -89,25 +108,26 @@ def _enumerate_directed_simplices(adj: np.ndarray, max_dim: int):
         ``simplices[d]`` contains all *d*-simplices.
     filtrations : list[list[float]]
         ``filtrations[d]`` contains the filtration value of each *d*-simplex.
-        Vertex filtrations are taken from the diagonal of *adj*;
-        higher-dimensional filtrations use the ``"max"`` algorithm (largest edge
-        weight in the simplex).
+        Vertex filtrations use ``vertex_weights``. Every simplex filtration is
+        the maximum of all constituent vertex weights and directed edge weights,
+        which guarantees that every face appears no later than its cofaces.
     """
-    n = adj.shape[0]
+    n = len(graph.vertex_weights)
     simplices: list[list[tuple[int, ...]]] = [[] for _ in range(max_dim + 1)]
     filtrations: list[list[float]] = [[] for _ in range(max_dim + 1)]
 
     # 0-simplices: vertices with their diagonal weights
     # Cast to float32 to match C++ flagser's value_t = float precision.
+    vertex_filtrations = [float(np.float32(weight)) for weight in graph.vertex_weights]
     for v in range(n):
         simplices[0].append((v,))
-        filtrations[0].append(float(np.float32(adj[v, v])))
+        filtrations[0].append(vertex_filtrations[v])
 
     out_neighbors = {
         v: {
-            w: float(np.float32(adj[v, w]))
+            w: float(np.float32(graph.edge_weights[v, w]))
             for w in range(n)
-            if v != w and adj[v, w] > 0 and adj[v, w] != np.inf
+            if v != w and graph.edge_present[v, w]
         }
         for v in range(n)
     }
@@ -127,13 +147,13 @@ def _enumerate_directed_simplices(adj: np.ndarray, max_dim: int):
             if vertex in used:
                 continue
             edge_weights = [out_neighbors[existing][vertex] for existing in simplex]
-            next_weight = max(max_weight, *edge_weights)
+            next_weight = max(max_weight, vertex_filtrations[vertex], *edge_weights)
             next_candidates = candidates.intersection(out_neighbors[vertex]).difference(used)
             next_candidates.discard(vertex)
             expand((*simplex, vertex), next_candidates, next_weight)
 
     for v in range(n):
-        expand((v,), set(out_neighbors[v]), 0.0)
+        expand((v,), set(out_neighbors[v]), vertex_filtrations[v])
 
     for dim in range(1, max_dim + 1):
         # Sort by filtration value (ties broken by the old brute-force scan order)
@@ -198,6 +218,9 @@ class dFlag(Complex):
     The supported ``.flag`` format has a ``dim 0`` section containing one
     whitespace-separated vertex weight per vertex, followed by an optional
     ``dim 1`` section containing ``source target weight`` directed edges.
+    Every edge row declares an edge even when its weight is zero or negative;
+    duplicate rows and non-finite weights are rejected. A simplex filtration is
+    the maximum of its vertex and directed-edge weights.
     """
 
     def __init__(
@@ -213,8 +236,8 @@ class dFlag(Complex):
         on_oversize: str = "raise",
         eigs_algorithm: str = "eigvalsh",
     ):
-        adj = _read_flag_file(filename)
-        simplices, filtrations = _enumerate_directed_simplices(adj, max_dim)
+        graph = _read_flag_file(filename)
+        simplices, filtrations = _enumerate_directed_simplices(graph, max_dim)
         boundaries = _build_boundaries(simplices)
 
         # Truncate to actual top dimension (highest dim with simplices),

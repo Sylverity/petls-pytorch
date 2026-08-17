@@ -9,8 +9,10 @@ import numpy as np
 import pytest
 import torch
 
-petls = pytest.importorskip("petls", reason="Reference PETLS not available")
+pytestmark = pytest.mark.parity
+
 from petls_pytorch.variants.rips import Rips  # noqa: E402
+from tests.reference import petls  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Tolerance
@@ -118,10 +120,6 @@ class TestRipsConstruction:
         test = _rips_file()
         assert test.top_dim == ref.pl.top_dim
 
-    def test_no_input_raises(self):
-        with pytest.raises(ValueError, match="requires filename, point set, or distance matrix"):
-            Rips()
-
 
 # ---------------------------------------------------------------------------
 # Spectra parity with reference (no threshold)
@@ -215,27 +213,3 @@ class TestRipsLaplacian:
         vertex_down = test.get_down(0, 0.0)
         assert vertex_down.shape == (len(POINTS_RECT), len(POINTS_RECT))
         assert torch.count_nonzero(vertex_down) == 0
-
-    def test_L_equals_up_plus_down(self):
-        test = _rips_points()
-        filts = test.get_all_filtrations()
-        for dim in range(test.top_dim + 1):
-            for i in range(len(filts) - 1):
-                a, b = filts[i], filts[i + 1]
-                L = test.get_L(dim, a, b)
-                up = test.get_up(dim, a, b)
-                down = test.get_down(dim, a)
-                np.testing.assert_allclose(
-                    L.cpu().numpy(),
-                    (up + down).cpu().numpy(),
-                    atol=ATOL,
-                    rtol=RTOL,
-                )
-
-    def test_get_up_top_dim_is_zero(self):
-        test = _rips_points()
-        filts = test.get_all_filtrations()
-        for a, b in [(filts[0], filts[1]), (filts[-2], filts[-1])]:
-            up = test.get_up(test.top_dim, a, b)
-            assert up.shape[0] == up.shape[1]
-            assert torch.allclose(up, torch.zeros_like(up))

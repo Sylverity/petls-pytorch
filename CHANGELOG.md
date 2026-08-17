@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- Separated native, PETLS-parity, and benchmark tests with explicit markers and lazy reference loading so missing optional PETLS cannot hide or destabilize implementation coverage.
+- Preserved isolated and zero-restriction sheaf cochain coordinates so disconnected or locally trivial sheaf cohomology is not silently erased.
+- Preserved zero/negative dFlag edges and face-monotone finite filtrations so weighted directed complexes are not silently altered or made invalid.
+- Kept Rips support simplices internal so public dimensions stop at ``max_dim`` while top-dimensional up-Laplacians remain correct, preventing implementation-only simplices from being reported as extra topology.
+- Disabled flipped partial eigensolves so reported Laplacian nullities cannot gain false topological features.
 - Replaced scalar-ARPACK nullspace recovery with a certified block LOBPCG path
   for feasible ordinary spectra with repeated zero eigenvalues. Sparse topology
   summaries now cross-check numerical nullity against Gudhi homology, audit

@@ -41,13 +41,27 @@ class sheaf_simplex_tree:
         self.restriction = restriction
         self.complex_dim = st.dimension()
 
-        # Give each simplex a unique index
-        index = 0
+        # Keep one deterministic order per dimension. Matrix coordinates and
+        # filtration entries must use these same lists, including isolated
+        # simplices that never occur in a restriction triple.
+        self.simplices_by_dimension: list[list[tuple[int, ...]]] = [
+            [] for _ in range(self.complex_dim + 1)
+        ]
+        self.filtrations_by_dimension: list[list[float]] = [[] for _ in range(self.complex_dim + 1)]
         indices: dict[tuple[int, ...], int] = {}
+        index = 0
         for simplex_with_filtration in self.st.get_filtration():
-            indices[tuple(simplex_with_filtration[0])] = index
+            simplex = tuple(int(vertex) for vertex in simplex_with_filtration[0])
+            dim = len(simplex) - 1
+            self.simplices_by_dimension[dim].append(simplex)
+            self.filtrations_by_dimension[dim].append(float(simplex_with_filtration[1]))
+            indices[simplex] = index
             index += 1
         self.indices = indices
+        self.simplex_indices_by_dimension = [
+            {simplex: index for index, simplex in enumerate(simplices)}
+            for simplices in self.simplices_by_dimension
+        ]
 
     def coface_index(self, simplex: list[int], coface: list[int]) -> int:
         """Index of the missing vertex, e.g. coface_index([0,1,3], [0,1,2,3]) = 2."""
@@ -70,53 +84,44 @@ class sheaf_simplex_tree:
             Coboundary matrices (maps k-simplices to (k+1)-simplices).
         filtrations : list[list[float]]
             Filtration values per dimension.
+
+        Every simplex contributes a cochain coordinate, including isolated
+        simplices and coordinates whose restriction entries are all zero.
         """
-        coboundaries_triples: list[list[list[float]]] = [[] for _ in range(self.complex_dim)]
-        filtrations: list[list[float]] = [[] for _ in range(self.complex_dim + 1)]
+        coboundaries_triples: list[list[tuple[tuple[int, ...], tuple[int, ...], float]]] = [
+            [] for _ in range(self.complex_dim)
+        ]
 
-        for simplex_with_filtration in self.st.get_filtration():
-            simplex = simplex_with_filtration[0]
-            filtration = simplex_with_filtration[1]
-            dim = len(simplex) - 1
-            filtrations[dim].append(filtration)
-            if dim == self.complex_dim:
-                continue
-            for coface_with_filtration in self.st.get_cofaces(simplex, 1):
-                coface = coface_with_filtration[0]
-                sign = (-1) ** (self.coface_index(simplex, coface) % 2)
-                coeff = sign * self.restriction(simplex, coface, self)
-                coboundaries_triples[dim].append(
-                    [self.indices[tuple(coface)], self.indices[tuple(simplex)], coeff]
-                )
+        for dim in range(self.complex_dim):
+            for simplex in self.simplices_by_dimension[dim]:
+                for coface_with_filtration in self.st.get_cofaces(list(simplex), 1):
+                    coface = tuple(int(vertex) for vertex in coface_with_filtration[0])
+                    simplex_list = list(simplex)
+                    coface_list = list(coface)
+                    sign = (-1) ** (self.coface_index(simplex_list, coface_list) % 2)
+                    coeff = sign * self.restriction(simplex_list, coface_list, self)
+                    coboundaries_triples[dim].append((coface, simplex, coeff))
 
-        return self.reindex_coboundaries(coboundaries_triples), filtrations
+        return self.reindex_coboundaries(coboundaries_triples), [
+            list(values) for values in self.filtrations_by_dimension
+        ]
 
     def reindex_coboundaries(self, coboundaries_triples):
-        """Re-index coboundary triples to per-dimension dense matrices."""
-        indices_of_actual_simplices_set = [set() for _ in range(self.complex_dim + 1)]
-        for dim in range(self.complex_dim):
-            for triple in coboundaries_triples[dim]:
-                indices_of_actual_simplices_set[dim].add(triple[1])
-                indices_of_actual_simplices_set[dim + 1].add(triple[0])
-        indices_of_actual_simplices = [list(s) for s in indices_of_actual_simplices_set]
-
-        index_mappings = [{} for _ in range(self.complex_dim + 1)]
-        for dim in range(self.complex_dim + 1):
-            for i, idx in enumerate(indices_of_actual_simplices[dim]):
-                index_mappings[dim][idx] = i
-
+        """Build dense matrices in the deterministic simplex-tree order."""
         coboundaries = []
         for dim in range(self.complex_dim):
             row = []
             col = []
             data = []
-            for triple in coboundaries_triples[dim]:
-                row.append(index_mappings[dim + 1][triple[0]])
-                col.append(index_mappings[dim][triple[1]])
-                data.append(triple[2])
+            local_rows = self.simplex_indices_by_dimension[dim + 1]
+            local_columns = self.simplex_indices_by_dimension[dim]
+            for coface, simplex, coeff in coboundaries_triples[dim]:
+                row.append(local_rows[coface])
+                col.append(local_columns[simplex])
+                data.append(coeff)
             shape = (
-                len(indices_of_actual_simplices[dim + 1]),
-                len(indices_of_actual_simplices[dim]),
+                len(self.simplices_by_dimension[dim + 1]),
+                len(self.simplices_by_dimension[dim]),
             )
             coboundary = coo_matrix((data, (row, col)), shape=shape).toarray()
             coboundaries.append(coboundary)

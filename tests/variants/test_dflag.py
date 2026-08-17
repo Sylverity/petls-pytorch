@@ -12,8 +12,10 @@ import numpy as np
 import pytest
 import torch
 
-petls = pytest.importorskip("petls", reason="Reference PETLS not available")
+pytestmark = pytest.mark.parity
+
 from petls_pytorch.variants.dflag import dFlag  # noqa: E402
+from tests.reference import petls  # noqa: E402
 
 ATOL = 1e-4
 RTOL = 1e-3

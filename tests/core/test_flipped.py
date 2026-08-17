@@ -76,14 +76,19 @@ def test_flipped_does_not_affect_lower_dims():
     np.testing.assert_allclose(eigs_1_regular, eigs_1_flipped, atol=ATOL, rtol=RTOL)
 
 
-def test_flipped_allpairs():
-    pl = get_test_complex()
-    pl.flipped = True
-    result = pl.spectra(allpairs=True)
-    assert isinstance(result, list)
-    # Check that top-dim entries have correct number of eigenvalues
-    for item in result:
-        dim, a, b, eigs = item
-        if dim == 2:
-            # d2 has 1 column, so top-dim Laplacian is 1x1
-            assert len(eigs) <= 1
+def test_partial_spectrum_preserves_true_top_laplacian_nullity_when_flipped():
+    """Partial spectra must not gain structural zeros from a flipped matrix."""
+    boundary = np.array([[-1.0, -1.0, 0.0], [1.0, 0.0, 1.0]])
+    complex_ = Complex(
+        boundaries=[boundary],
+        filtrations=[[0.0, 0.0], [0.0, 0.0, 0.0]],
+    )
+    complex_.flipped = True
+    complex_.set_eigs_algorithm("sparse", num_eigenvalues=1, eigenvalue_order="SM")
+
+    spectrum = complex_.spectra(dim=1, a=0.0, b=1.0)
+    expected_nullity = boundary.shape[1] - np.linalg.matrix_rank(boundary)
+    nullity, _ = complex_.eigenvalues_summarize(spectrum)
+
+    assert len(spectrum) == 1
+    assert nullity == expected_nullity

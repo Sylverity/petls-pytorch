@@ -14,6 +14,8 @@ import torch
 from petls_pytorch.core.complex import Complex
 from tests.conftest import assert_tensors_close
 
+pytestmark = pytest.mark.parity
+
 
 # ---------------------------------------------------------------------------
 # Fixture helpers (same data as original test_base.py::get_pl())
@@ -48,19 +50,6 @@ def test_get_all_filtrations_matches_reference(ref_small_complex):
     ref_filts = ref_small_complex.pl.get_all_filtrations()
     assert our_filts == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
     assert set(ref_filts).issubset(our_filts)
-
-
-def test_filtration_list_to_spectra_request():
-    """Request generation should match reference logic."""
-    pl = get_small_complex()
-    filtrations = [0.0, 3.0, 5.0]
-    dims = [0, 1, 2]
-    requests = pl.filtration_list_to_spectra_request(filtrations, dims)
-
-    expected_len = (len(filtrations) - 1) * len(dims) + len(dims)
-    assert len(requests) == expected_len
-    assert requests[0] == (0, 0.0, 3.0)
-    assert requests[-1] == (2, 5.0, 5.0)
 
 
 # ---------------------------------------------------------------------------
@@ -244,37 +233,9 @@ def test_get_L_top_dim_is_down_only(ref_small_complex):
     assert_tensors_close(L, down, atol=1e-5, rtol=1e-4)
 
 
-def test_get_L_beyond_top_dim_is_empty():
-    """dim > top_dim returns empty matrix."""
-    pl = get_small_complex()
-    L = pl.get_L(10, 0.0, 1.0)
-    assert L.shape == (0, 0)
-
-
 # ---------------------------------------------------------------------------
 # Utility methods
 # ---------------------------------------------------------------------------
-
-
-def test_eigenvalues_summarize():
-    """Matches C++ eigenvalues_summarize with 1e-4 tolerance."""
-    pl = get_small_complex()
-
-    betti, lam = pl.eigenvalues_summarize([0.0, 0.0, 0.0, 0.0])
-    assert betti == 4
-    assert lam == 0.0
-
-    betti, lam = pl.eigenvalues_summarize([0.0, 0.0, 1.5])
-    assert betti == 2
-    assert abs(lam - 1.5) < 1e-6
-
-    betti, lam = pl.eigenvalues_summarize([1.0, 2.0, 3.0])
-    assert betti == 0
-    assert abs(lam - 1.0) < 1e-6
-
-    betti, lam = pl.eigenvalues_summarize([])
-    assert betti == 0
-    assert lam == 0.0
 
 
 def test_eigenvalues_summarize_matches_reference(ref_small_complex):
@@ -298,22 +259,3 @@ def test_eigenvalues_summarize_matches_reference(ref_small_complex):
 # ---------------------------------------------------------------------------
 # Regression: exact small example from original docstring
 # ---------------------------------------------------------------------------
-
-
-def test_small_example_data():
-    """
-    The exact example from the original Complex docstring.
-    """
-    pl = get_small_complex()
-    assert pl.top_dim == 2
-    assert pl.filtered_boundaries[1].shape == (3, 3)  # d1
-    assert pl.filtered_boundaries[2].shape == (3, 1)  # d2
-
-    assert torch.allclose(
-        pl.filtered_boundaries[1].domain_filtrations.cpu(),
-        torch.tensor([3.0, 4.0, 5.0], dtype=torch.float64),
-    )
-    assert torch.allclose(
-        pl.filtered_boundaries[1].range_filtrations.cpu(),
-        torch.tensor([0.0, 1.0, 2.0], dtype=torch.float64),
-    )

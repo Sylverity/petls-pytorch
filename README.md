@@ -106,6 +106,11 @@ filtrations = psl.get_all_filtrations()
 sheaf_eigenvalues = psl.spectra(dim=0, a=filtrations[0], b=filtrations[-1])
 ```
 
+For `Rips`, `max_dim` is the highest homology/Laplacian dimension reported by
+the public API. PETLS may retain one additional simplex dimension internally so
+the top-dimensional Laplacian includes the up term needed to distinguish cycles
+from boundaries.
+
 For any complex, choose `a <= b` from `get_all_filtrations()`.
 `spectra(dim, a, b)` computes the persistent-Laplacian spectrum; at `a == b`
 it is the ordinary Hodge spectrum.
@@ -289,9 +294,11 @@ dim 1
 
 The `dim 0` line after the header contains one whitespace-separated vertex
 weight per vertex. Each `dim 1` row is `source target weight`, using zero-based
-vertex indices. Missing directed edges are absent from the file; self-loops are
-not supported. Filtration values for higher-dimensional directed simplices are
-the maximum edge weight in each simplex.
+vertex indices. An edge is present whenever its row appears, including zero or
+negative weights; missing directed edges remain absent. Self-loops are not
+supported, duplicate rows are rejected, and all weights must be finite.
+Filtration values are the maximum of all vertex and directed-edge weights in a
+simplex, ensuring every face appears no later than its cofaces.
 
 ## Benchmark Notes
 
@@ -392,13 +399,24 @@ uv run --extra dev ruff check .
 uv run --extra dev mypy src/petls_pytorch benchmark
 ```
 
-By default, tests that compare against the original PETLS package are skipped
-when `petls` is not installed. To run the full parity suite against the
-reference implementation, use `uv run --with petls` to add PETLS to the
-temporary run environment:
+Tests are explicitly separated with `native`, `parity`, and `benchmark` markers.
+The native suite is independent of the optional reference package:
 
 ```bash
-uv run --extra dev --with petls pytest tests/ -v
+uv run --extra dev pytest -m "not parity"
+```
+
+Run the PETLS comparison suite separately. It requires the installed reference
+package and never changes native-test collection:
+
+```bash
+uv run --extra dev --with petls pytest -m parity -v
+```
+
+Benchmark harness configuration tests are also selectable independently:
+
+```bash
+uv run --extra dev pytest -m benchmark -v
 ```
 
 On Windows, PETLS `get_down()` reference calls can trigger access violations in
@@ -407,7 +425,7 @@ avoid those platform-specific crashes while still running the rest of the suite,
 exclude those reference checks:
 
 ```bash
-uv run --extra dev --with petls pytest tests/ -v -k "not test_get_down_eigenvalues_match_reference and not test_get_down_eigenvalues_match_mwe"
+uv run --extra dev --with petls pytest -m parity -v -k "not test_get_down_eigenvalues_match_reference and not test_get_down_eigenvalues_match_mwe"
 ```
 
 If you are not using `uv`, install the package and test dependencies first:
@@ -415,7 +433,7 @@ If you are not using `uv`, install the package and test dependencies first:
 ```bash
 python -m pip install -e ".[dev]"
 python -m pip install petls  # only needed for the full parity suite
-pytest tests/ -v
+pytest -m "not parity" -v
 ```
 
 The full parity suite covers core functionality, Rips complexes, alpha

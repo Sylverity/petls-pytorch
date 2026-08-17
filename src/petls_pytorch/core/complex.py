@@ -90,6 +90,7 @@ class Complex:
         self._logger = logging.getLogger(__name__)
 
         self.top_dim: int = 0
+        self._boundary_top_dim: int = 0
         self.filtered_boundaries: List[FilteredBoundaryMatrix] = []
         self.profile = Profile(zero_atol=self.zero_atol, zero_rtol=self.zero_rtol)
         self.simplex_tree = simplex_tree
@@ -130,6 +131,7 @@ class Complex:
             # Empty complex — user will set later
             self.filtered_boundaries = []
             self.top_dim = 0
+            self._boundary_top_dim = 0
 
         self.set_eigs_algorithm(eigs_algorithm)
 
@@ -166,7 +168,8 @@ class Complex:
             )
 
         self.filtered_boundaries = []
-        self.top_dim = len(boundaries)
+        self._boundary_top_dim = len(boundaries)
+        self.top_dim = self._boundary_top_dim
 
         # d_0 placeholder aligns indexing with the original PETLS Complex, but
         # its metadata must contain every actual vertex birth (including
@@ -265,12 +268,12 @@ class Complex:
     def _laplacian_rows(self, dim: int, scale: float) -> int:
         if dim < 0:
             raise ValueError("dim must be non-negative")
+        if dim > self.top_dim or dim >= len(self.filtered_boundaries):
+            return 0
         if dim == 0:
-            if self.top_dim == 0:
+            if len(self.filtered_boundaries) == 1:
                 return self.filtered_boundaries[0].index_of_filtration(True, scale) + 1
             return self.filtered_boundaries[1].index_of_filtration(False, scale) + 1
-        if dim > self.top_dim:
-            return 0
         return self.filtered_boundaries[dim].index_of_filtration(True, scale) + 1
 
     def estimate_laplacian(self, dim: int, a: float, b: float | None = None) -> dict[str, Any]:
@@ -280,7 +283,7 @@ class Complex:
             raise ValueError("b must be greater than or equal to a")
         rows = self._laplacian_rows(dim, a)
         intermediate_rows = rows
-        if dim < self.top_dim:
+        if dim <= self.top_dim and dim + 1 < len(self.filtered_boundaries):
             coboundary = self.filtered_boundaries[dim + 1]
             if coboundary.index_of_filtration(True, b) >= 0:
                 intermediate_rows = coboundary.index_of_filtration(False, b) + 1
@@ -355,13 +358,13 @@ class Complex:
         result = scipy.sparse.csr_matrix(
             (rows, rows), dtype=np.dtype(str(self.dtype).split(".")[-1])
         )
-        if rows == 0 or dim > self.top_dim:
+        if rows == 0 or dim > self.top_dim or dim >= len(self.filtered_boundaries):
             return result
         if dim > 0:
             boundary = self.filtered_boundaries[dim].submatrix_at_filtration(scale)
             boundary_scipy = self._to_scipy_sparse(boundary)
             result = result + boundary_scipy.T @ boundary_scipy
-        if dim < self.top_dim:
+        if dim + 1 < len(self.filtered_boundaries):
             coboundary = self.filtered_boundaries[dim + 1].submatrix_at_filtration(scale)
             coboundary_scipy = self._to_scipy_sparse(coboundary)
             result = result + coboundary_scipy @ coboundary_scipy.T
@@ -705,14 +708,21 @@ class Complex:
     def get_L_top_dim_flipped(self, a: float) -> torch.Tensor:
         """Get the flipped top-dimension Laplacian B @ B^T.
 
-        When ``flipped=True``, ``spectra()`` uses this matrix for the top
-        dimension because the nonzero eigenvalues of ``B @ B^T`` (shape
-        m×m) are the same as those of ``B^T @ B`` (shape n×n), but the
-        former may be smaller.
+        When ``flipped=True`` and the complete ``eigvalsh`` solver is selected,
+        ``spectra()`` may use this matrix for the actual top dimension because
+        the nonzero eigenvalues of ``B @ B^T`` (shape m×m) are the same as
+        those of ``B^T @ B`` (shape n×n), but the former may be smaller.
+        Partial solvers stay on ``B^T @ B`` because the two matrices have
+        different kernel dimensions.
         """
-        if self.top_dim == 0:
+        if self.top_dim != self._boundary_top_dim:
+            raise ValueError(
+                "Flipped top-dimensional Laplacians are unavailable when the "
+                "object retains a hidden higher-dimensional boundary."
+            )
+        if self._boundary_top_dim == 0:
             return torch.empty(0, 0, dtype=self.dtype, device=self.device)
-        fbm = self.filtered_boundaries[self.top_dim]
+        fbm = self.filtered_boundaries[self._boundary_top_dim]
         flipped_rows = fbm.index_of_filtration(False, a) + 1
         boundary_columns = fbm.index_of_filtration(True, a) + 1
         element_size = torch.empty((), dtype=self.dtype).element_size()
@@ -738,14 +748,10 @@ class Complex:
         from petls_pytorch.core.laplacian import get_up
 
         self._guard_dense_laplacian(dim, a, b)
-        if dim >= self.top_dim:
-            # No higher-dimensional simplices → zero matrix sized to dim-simplices at a
-            if dim == 0 and len(self.filtered_boundaries) == 1:
-                # Edge case: no 1-simplices at all
-                n = self.filtered_boundaries[0].index_of_filtration(True, a) + 1
-                return torch.zeros(n, n, dtype=self.dtype, device=self.device)
-            fbm = self.filtered_boundaries[dim]
-            n = fbm.index_of_filtration(True, a) + 1
+        if dim > self.top_dim or dim >= len(self.filtered_boundaries):
+            return torch.empty(0, 0, dtype=self.dtype, device=self.device)
+        n = self._laplacian_rows(dim, a)
+        if dim + 1 >= len(self.filtered_boundaries):
             return torch.zeros(n, n, dtype=self.dtype, device=self.device)
         return get_up(self.filtered_boundaries[dim + 1], a, b, self.device, self.dtype)
 
@@ -754,6 +760,8 @@ class Complex:
         from petls_pytorch.core.laplacian import get_down
 
         self._guard_dense_laplacian(dim, a, a)
+        if dim > self.top_dim or dim >= len(self.filtered_boundaries):
+            return torch.empty(0, 0, dtype=self.dtype, device=self.device)
         return cast(
             torch.Tensor,
             get_down(self.filtered_boundaries[dim], a, self.device, self.dtype),
@@ -858,8 +866,17 @@ class Complex:
                 eigs_list = self.ordinary_spectrum(d, fa, self._num_eigenvalues)
                 self.profile.stop_eigs()
             else:
-                # Flip only when B @ B.T is smaller than B.T @ B.
-                if d == self.top_dim and self.flipped:
+                # Flipping preserves the nonzero spectrum, but not the kernel
+                # dimension. It is therefore safe only for the complete
+                # eigvalsh solve, and only for the actual top boundary where
+                # there is no higher-dimensional up-Laplacian term.
+                can_flip_top_dim = (
+                    self.flipped
+                    and self._eigs_algorithm == "eigvalsh"
+                    and d == self.top_dim
+                    and d + 1 >= len(self.filtered_boundaries)
+                )
+                if can_flip_top_dim:
                     fbm = self.filtered_boundaries[self.top_dim]
                     boundary_rows = fbm.index_of_filtration(False, fa) + 1
                     boundary_columns = fbm.index_of_filtration(True, fa) + 1
@@ -883,17 +900,15 @@ class Complex:
 
             self.profile.stop_all()
 
-            # Zero-pad flipped top-dimension eigenvalues to match true Laplacian size
+            # Complete eigvalsh on B @ B.T omits only the structural kernel
+            # contributed by extra columns of B. Restore those columns so the
+            # result represents the true B.T @ B Laplacian dimension.
             if use_flipped_top_dim:
                 fbm = self.filtered_boundaries[self.top_dim]
                 B = fbm.submatrix_at_filtration(fa)
                 m, n = B.shape
-                expected = l_rows
-                actual = len(eigs_list)
-                if actual < expected:
-                    eigs_list = [0.0] * (expected - actual) + sorted(eigs_list)
-                elif actual > expected:
-                    eigs_list = sorted(eigs_list)[actual - expected :]
+                structural_zeros = max(0, n - m)
+                eigs_list = [0.0] * structural_zeros + sorted(eigs_list)
 
             betti, lam = self.eigenvalues_summarize(eigs_list)
             self.profile.dims.append(d)
@@ -1015,6 +1030,8 @@ class Complex:
         """Return Gudhi persistence intervals ``[birth, death)`` for a dimension."""
         if dim < 0:
             raise ValueError("dim must be non-negative")
+        if dim > self.top_dim:
+            return np.empty((0, 2), dtype=np.float64)
         self._ensure_persistence()
         intervals = self.simplex_tree.persistence_intervals_in_dimension(dim)
         return np.asarray(intervals, dtype=np.float64).copy()
@@ -1216,6 +1233,8 @@ class Complex:
             raise RuntimeError("Simplex mappings require construction from a Gudhi SimplexTree")
         if dim < 0 or dim >= len(self.simplices_by_dimension):
             raise ValueError(f"dim must be between 0 and {len(self.simplices_by_dimension) - 1}")
+        if dim > self.top_dim:
+            raise ValueError(f"dim must be between 0 and {self.top_dim}")
         if coefficient_atol < 0:
             raise ValueError("coefficient_atol must be non-negative")
         if max_features is not None and max_features < 1:

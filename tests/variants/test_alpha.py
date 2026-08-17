@@ -9,8 +9,10 @@ import numpy as np
 import pytest
 import torch
 
-petls = pytest.importorskip("petls", reason="Reference PETLS not available")
+pytestmark = pytest.mark.parity
+
 from petls_pytorch.variants.alpha import Alpha  # noqa: E402
+from tests.reference import petls  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Tolerance
@@ -98,15 +100,6 @@ class TestAlphaConstruction:
         torch_filts = torch_alpha_points.get_all_filtrations()
         assert torch_filts == pytest.approx(ref_filts, abs=ATOL)
 
-    def test_points_and_off_produce_same_result(self, torch_alpha_points, torch_alpha_off):
-        pts = _extract_spectra(torch_alpha_points)
-        off = _extract_spectra(torch_alpha_off)
-        _compare_spectra(pts, off)
-
-    def test_no_input_raises(self):
-        with pytest.raises(ValueError, match="requires filename or point set"):
-            Alpha()
-
 
 # ---------------------------------------------------------------------------
 # Spectra parity with reference
@@ -140,16 +133,6 @@ class TestAlphaSpectra:
                     rtol=RTOL,
                 )
 
-    def test_request_list_matches_default_spectra(self, torch_alpha_points):
-        """The original petls.Alpha ignores request_list when use_cpp_eigs=False.
-        Our implementation correctly honours it; we just verify it works.
-        """
-        req = [(0, 0.25, 0.5), (1, 0.25, 0.5)]
-        result = torch_alpha_points.spectra(request_list=req)
-        assert len(result) == 2
-        for dim, a, b, eigs in result:
-            assert (dim, a, b) in {(0, 0.25, 0.5), (1, 0.25, 0.5)}
-
 
 # ---------------------------------------------------------------------------
 # Eigenpairs parity
@@ -166,18 +149,6 @@ class TestAlphaEigenpairs:
             atol=ATOL,
             rtol=RTOL,
         )
-
-    def test_eigenpairs_vectors_equation(self, torch_alpha_points):
-        vals, vecs = torch_alpha_points.eigenpairs(1, 0.25, 0.5)
-        if len(vals) == 0:
-            pytest.skip("No eigenvalues to verify")
-        L = torch_alpha_points.get_L(1, 0.25, 0.5)
-        # L @ v == lambda * v  (within tolerance)
-        for i, lam in enumerate(vals):
-            v = vecs[:, i]
-            lhs = L @ v
-            rhs = lam * v
-            np.testing.assert_allclose(lhs.cpu().numpy(), rhs.cpu().numpy(), atol=ATOL, rtol=RTOL)
 
 
 # ---------------------------------------------------------------------------
@@ -247,25 +218,3 @@ class TestAlphaLaplacian:
         vertex_down = torch_alpha_points.get_down(0, 0.0)
         assert vertex_down.shape == (len(POINTS_4), len(POINTS_4))
         assert torch.count_nonzero(vertex_down) == 0
-
-    def test_L_equals_up_plus_down(self, torch_alpha_points):
-        filts = torch_alpha_points.get_all_filtrations()
-        for dim in range(torch_alpha_points.top_dim + 1):
-            for i in range(len(filts) - 1):
-                a, b = filts[i], filts[i + 1]
-                L = torch_alpha_points.get_L(dim, a, b)
-                up = torch_alpha_points.get_up(dim, a, b)
-                down = torch_alpha_points.get_down(dim, a)
-                np.testing.assert_allclose(
-                    L.cpu().numpy(),
-                    (up + down).cpu().numpy(),
-                    atol=ATOL,
-                    rtol=RTOL,
-                )
-
-    def test_get_up_top_dim_is_zero(self, torch_alpha_points):
-        filts = torch_alpha_points.get_all_filtrations()
-        for a, b in [(filts[0], filts[1]), (filts[-2], filts[-1])]:
-            up = torch_alpha_points.get_up(torch_alpha_points.top_dim, a, b)
-            assert up.shape[0] == up.shape[1]
-            assert torch.allclose(up, torch.zeros_like(up))

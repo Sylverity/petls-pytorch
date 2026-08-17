@@ -9,38 +9,36 @@ Provides:
 
 from __future__ import annotations
 
-import warnings
+import importlib.util
 
 import numpy as np
 import pytest
 import torch
 
-# Try to import reference PETLS from sibling directory
-_ref_petls = None
-
-try:
-    import sys
-    from pathlib import Path
-
-    ref_path = Path(__file__).resolve().parent.parent.parent / "PETLS"
-    if str(ref_path) not in sys.path:
-        sys.path.insert(0, str(ref_path))
-    # The original package is importable as 'petls' from its own venv
-    # In our venv it may also be installed; prefer the installed one
-    import petls as _ref_petls_module
-
-    _ref_petls = _ref_petls_module
-except Exception as e:
-    _ref_petls = None
-    warnings.warn(f"Could not import reference PETLS: {e}")
-
 
 @pytest.fixture(scope="session")
 def reference_petls():
-    """Yield the original C++ PETLS package, or skip if unavailable."""
-    if _ref_petls is None:
-        pytest.skip("Reference PETLS not available")
-    return _ref_petls
+    """Yield the installed original PETLS package, or skip if unavailable."""
+    try:
+        import petls
+    except ImportError:
+        pytest.skip("Reference PETLS is not installed; run the parity suite with petls")
+    return petls
+
+
+def pytest_collection_modifyitems(config, items):
+    """Keep the default suite independent from the optional PETLS reference."""
+    try:
+        reference_available = importlib.util.find_spec("petls") is not None
+    except (ImportError, ModuleNotFoundError):
+        reference_available = False
+    if not reference_available:
+        skip_reference = pytest.mark.skip(
+            reason="Reference PETLS is not installed; run the parity suite with petls"
+        )
+        for item in items:
+            if "parity" in item.keywords:
+                item.add_marker(skip_reference)
 
 
 @pytest.fixture

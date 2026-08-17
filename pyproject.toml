@@ -63,6 +63,11 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+markers = [
+    "native: PETLS-independent implementation tests",
+    "parity: compare petls-pytorch against the installed original PETLS package",
+    "benchmark: validate benchmark configuration and harness behavior",
+]
 
 [tool.ruff]
 line-length = 100
