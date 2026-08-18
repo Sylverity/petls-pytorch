@@ -5,7 +5,8 @@ Stores a boundary matrix d_n as a torch sparse tensor together with filtration
 values for domain (n-simplices) and range ((n-1)-simplices).
 
 Key design decisions:
-  - Internal storage is torch.sparse_coo_tensor (most flexible for manipulation).
+  - COO and CSR inputs are accepted; internal storage is normalized to COO
+    (most flexible for manipulation).
   - All tensors live on the configured device.
   - submatrix_at_filtration filters and reindexes COO entries (O(nnz)).
 """
@@ -25,8 +26,8 @@ class FilteredBoundaryMatrix:
     Parameters
     ----------
     matrix : torch.Tensor
-        Sparse COO tensor of shape (m, n) where m = #range simplices,
-        n = #domain simplices.
+        Sparse COO or CSR tensor of shape (m, n) where m = #range simplices,
+        n = #domain simplices. CSR inputs are normalized to COO internally.
     domain_filtrations : torch.Tensor
         1-D tensor of shape (n,) with filtration values for n-simplices.
     range_filtrations : torch.Tensor
@@ -40,7 +41,7 @@ class FilteredBoundaryMatrix:
         range_filtrations: torch.Tensor,
         device: torch.device | str | None = None,
     ):
-        if not matrix.is_sparse:
+        if matrix.layout not in (torch.sparse_coo, torch.sparse_csr):
             raise ValueError("matrix must be a sparse tensor (COO or CSR)")
 
         target_device = torch.device(device) if device is not None else DEFAULT_DEVICE
@@ -52,6 +53,10 @@ class FilteredBoundaryMatrix:
                 range_filtrations.cpu(),
             )
         self.matrix = matrix.to(device=target_device)
+        if self.matrix.layout == torch.sparse_csr:
+            # The filtering and incidence paths operate on COO indices. Accept
+            # CSR input at the boundary of the API, then normalize storage.
+            self.matrix = self.matrix.to_sparse_coo().coalesce()
         self.domain_filtrations = domain_filtrations.to(device=target_device, dtype=torch.float64)
         self.range_filtrations = range_filtrations.to(device=target_device, dtype=torch.float64)
 

@@ -8,6 +8,7 @@ Mirrors the original PETLS Profile class but is GPU-aware:
 
 from __future__ import annotations
 
+import csv
 import time
 from dataclasses import dataclass, field
 from typing import List
@@ -37,24 +38,28 @@ class Timer:
 class CudaTimer:
     """GPU timer using CUDA events for accurate device-side timing."""
 
-    def __init__(self) -> None:
+    def __init__(self, device: torch.device | str = "cuda") -> None:
+        self.device = torch.device(device)
         self._start_event: torch.cuda.Event | None = None
         self._end_event: torch.cuda.Event | None = None
         self.duration: float = 0.0
 
     def start(self) -> None:
-        self._start_event = torch.cuda.Event(enable_timing=True)
-        self._end_event = torch.cuda.Event(enable_timing=True)
-        self._start_event.record()
+        with torch.cuda.device(self.device):
+            self._start_event = torch.cuda.Event(enable_timing=True)
+            self._end_event = torch.cuda.Event(enable_timing=True)
+            self._start_event.record()
 
     def stop(self) -> float:
         if self._start_event is None:
             raise RuntimeError("CudaTimer.stop() called before start()")
         if self._end_event is None:
             raise RuntimeError("CudaTimer.stop() called before start()")
-        self._end_event.record()
-        torch.cuda.synchronize()
-        self.duration = self._start_event.elapsed_time(self._end_event)  # milliseconds
+        with torch.cuda.device(self.device):
+            self._end_event.record()
+            torch.cuda.synchronize(self.device)
+            # Profile durations use seconds, matching Timer.
+            self.duration = self._start_event.elapsed_time(self._end_event) / 1000.0
         self._start_event = None
         self._end_event = None
         return self.duration
@@ -82,14 +87,29 @@ class Profile:
     lambdas: List[float] = field(default_factory=list)
     zero_atol: float = 1e-8
     zero_rtol: float = 1e-7
+    device: torch.device | str | None = None
 
-    _timer_all: Timer = field(default_factory=Timer)
-    _timer_eigs: Timer = field(default_factory=Timer)
-    _timer_L: Timer = field(default_factory=Timer)
+    _timer_all: Timer | CudaTimer = field(default_factory=Timer)
+    _timer_eigs: Timer | CudaTimer = field(default_factory=Timer)
+    _timer_L: Timer | CudaTimer = field(default_factory=Timer)
 
     def __post_init__(self) -> None:
         if self.zero_atol < 0 or self.zero_rtol < 0:
             raise ValueError("zero_atol and zero_rtol must be non-negative")
+        resolved_device = (
+            torch.device(self.device) if self.device is not None else torch.device("cpu")
+        )
+        self.device = resolved_device
+        if resolved_device.type == "cuda":
+            if not torch.cuda.is_available():
+                raise RuntimeError("CUDA profiling requested but CUDA is unavailable")
+            self._timer_all = CudaTimer(resolved_device)
+            self._timer_eigs = CudaTimer(resolved_device)
+            self._timer_L = CudaTimer(resolved_device)
+        else:
+            self._timer_all = Timer()
+            self._timer_eigs = Timer()
+            self._timer_L = Timer()
 
     def start_all(self) -> None:
         self._timer_all.start()
@@ -139,19 +159,29 @@ class Profile:
 
     def to_csv(self, filename: str) -> None:
         """Write profile to CSV."""
-        import pandas as pd
-
-        df = pd.DataFrame(
-            {
-                "dim": self.dims,
-                "filtration_a": self.filtration_a,
-                "filtration_b": self.filtration_b,
-                "duration_all": self.durations_all,
-                "duration_eigs": self.durations_eigs,
-                "duration_L": self.durations_L,
-                "L_rows": self.L_rows,
-                "betti": self.bettis,
-                "lambda": self.lambdas,
-            }
-        )
-        df.to_csv(filename, index=False)
+        fieldnames = [
+            "dim",
+            "filtration_a",
+            "filtration_b",
+            "duration_all",
+            "duration_eigs",
+            "duration_L",
+            "L_rows",
+            "betti",
+            "lambda",
+        ]
+        columns = [
+            self.dims,
+            self.filtration_a,
+            self.filtration_b,
+            self.durations_all,
+            self.durations_eigs,
+            self.durations_L,
+            self.L_rows,
+            self.bettis,
+            self.lambdas,
+        ]
+        with open(filename, "w", newline="") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(fieldnames)
+            writer.writerows(zip(*columns))

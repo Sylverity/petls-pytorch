@@ -8,8 +8,8 @@ Reads CSV result files and produces:
   - Comparison tables (if multiple algorithm backends are present)
 
 Usage:
-    python -m benchmark.analyze benchmark_results/*.csv
-    python -m benchmark.analyze --dir benchmark_results --plot_dir benchmark_plots
+    python -m benchmark.analyze benchmark-results/results/*.csv
+    python -m benchmark.analyze --dir benchmark-results/results --plot_dir benchmark-results/plots
 """
 
 import argparse
@@ -41,19 +41,6 @@ def numeric(rows: List[Dict], key: str) -> np.ndarray:
     return np.array([float(r[key]) for r in rows])
 
 
-def compute_stats(values: np.ndarray) -> Dict:
-    """Compute basic statistics."""
-    return {
-        "count": len(values),
-        "mean": float(np.mean(values)),
-        "median": float(np.median(values)),
-        "std": float(np.std(values)),
-        "min": float(np.min(values)),
-        "max": float(np.max(values)),
-        "sum": float(np.sum(values)),
-    }
-
-
 def print_table(title: str, headers: List[str], rows: List[List]):
     """Pretty-print a table."""
     print(f"\n{title}")
@@ -76,9 +63,36 @@ def analyze_file(path: str, plot_dir: Optional[str] = None) -> Dict:
     rows = load_csv(path)
     if not rows:
         return {}
-    completed_rows = [r for r in rows if str(r.get("skipped", "False")).lower() != "true"]
+    completed_rows = [
+        r
+        for r in rows
+        if str(r.get("skipped", "False")).lower() != "true"
+        and str(r.get("failed", "False")).lower() != "true"
+    ]
     skipped_rows = [r for r in rows if str(r.get("skipped", "False")).lower() == "true"]
-    timing_rows = completed_rows or rows
+    failed_rows = [r for r in rows if str(r.get("failed", "False")).lower() == "true"]
+    timing_rows = completed_rows
+
+    if not timing_rows:
+        overall = {
+            "file": Path(path).name,
+            "trials": len(rows),
+            "completed": 0,
+            "skipped": len(skipped_rows),
+            "failed": len(failed_rows),
+            "total_time_sec": 0.0,
+            "max_matrix": 0,
+            "mean_matrix": 0,
+        }
+        print(f"\n{'=' * 60}")
+        print(f"  Analysis: {overall['file']}")
+        print(f"  Trials:       {overall['trials']}")
+        print("  Completed:    0")
+        print(f"  Skipped:      {overall['skipped']}")
+        print(f"  Failed:       {overall['failed']}")
+        print("  No completed benchmark rows to analyze.")
+        print(f"{'=' * 60}\n")
+        return overall
 
     sizes = numeric(timing_rows, "matrix_rows")
     build = numeric(timing_rows, "build_time_ms")
@@ -92,6 +106,7 @@ def analyze_file(path: str, plot_dir: Optional[str] = None) -> Dict:
         "trials": len(rows),
         "completed": len(completed_rows),
         "skipped": len(skipped_rows),
+        "failed": len(failed_rows),
         "total_time_sec": float(np.sum(total)) / 1000.0,
         "max_matrix": int(np.max(sizes)),
         "mean_matrix": int(np.mean(sizes)),
@@ -103,6 +118,7 @@ def analyze_file(path: str, plot_dir: Optional[str] = None) -> Dict:
     print(f"  Trials:       {overall['trials']}")
     print(f"  Completed:    {overall['completed']}")
     print(f"  Skipped:      {overall['skipped']}")
+    print(f"  Failed:       {overall['failed']}")
     print(f"  Total time:   {overall['total_time_sec']:.2f} s")
     print(f"  Max matrix:   {overall['max_matrix']} x {overall['max_matrix']}")
     print(f"  Mean matrix:  {overall['mean_matrix']} x {overall['mean_matrix']}")
@@ -261,10 +277,11 @@ def main():
         p = Path(args.dir)
         files = sorted(str(f) for f in p.glob("*.csv"))
     else:
-        # Default: look for latest benchmark_results directory
-        candidates = sorted(Path(".").glob("benchmark_results*"))
-        if candidates:
-            files = sorted(str(f) for f in candidates[-1].glob("*.csv"))
+        # Runner output defaults to benchmark-results/results; include named
+        # runs beneath the same root when analyzing without explicit paths.
+        output_root = Path("benchmark-results")
+        if output_root.exists():
+            files = sorted(str(f) for f in output_root.rglob("*.csv"))
 
     if not files:
         print("No benchmark CSV files found.")

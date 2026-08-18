@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "petls-pytorch"
-version = "1.1.1"
+version = "1.1.2"
 description = "GPU-native Persistent Topological Laplacians in PyTorch"
 readme = "README.md"
 requires-python = ">=3.10,<3.15"
@@ -29,8 +29,6 @@ dependencies = [
     "numpy>=1.24.0",
     "scipy>=1.10.0",
     "gudhi>=3.10.0",
-    "pandas>=2.0.0",
-    "matplotlib>=3.7.0",
 ]
 
 [project.optional-dependencies]
@@ -38,6 +36,9 @@ dependencies = [
 # installed package, so it lives here rather than in the runtime dependencies above.
 benchmark = [
     "tadasets>=0.2.0",
+]
+analysis = [
+    "matplotlib>=3.7.0",
 ]
 dev = [
     "pytest>=7.4.0",

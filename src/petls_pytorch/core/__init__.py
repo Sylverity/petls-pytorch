@@ -2,7 +2,7 @@
 
 from petls_pytorch.core.filtered_boundary import FilteredBoundaryMatrix
 from petls_pytorch.core.complex import Complex, LaplacianSizeError
-from petls_pytorch.core.profile import Profile, Timer
+from petls_pytorch.core.profile import CudaTimer, Profile, Timer
 
 __all__ = [
     "FilteredBoundaryMatrix",
@@ -10,4 +10,5 @@ __all__ = [
     "LaplacianSizeError",
     "Profile",
     "Timer",
+    "CudaTimer",
 ]

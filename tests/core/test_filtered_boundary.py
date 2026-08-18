@@ -12,6 +12,7 @@ import pytest
 import torch
 
 from petls_pytorch.core.filtered_boundary import FilteredBoundaryMatrix
+from petls_pytorch.core.complex import Complex
 from tests.conftest import assert_tensors_close
 
 
@@ -36,6 +37,24 @@ def test_construction_from_numpy():
     assert fbm.num_rows == 2
     assert fbm.num_cols == 3
     assert fbm.matrix._nnz() == 4  # four nonzeros
+
+
+@pytest.mark.filterwarnings("ignore:Sparse CSR tensor support is in beta state")
+@pytest.mark.filterwarnings("ignore:Sparse invariant checks are implicitly disabled")
+def test_construction_accepts_csr_input():
+    matrix = torch.tensor([[1.0, 0.0], [0.0, 2.0]]).to_sparse_csr()
+    fbm = FilteredBoundaryMatrix(
+        matrix=matrix,
+        domain_filtrations=torch.tensor([0.0, 1.0], dtype=torch.float64),
+        range_filtrations=torch.tensor([0.0, 1.0], dtype=torch.float64),
+    )
+
+    assert fbm.shape == (2, 2)
+    assert torch.equal(fbm.matrix.to_dense(), matrix.to_dense())
+    assert fbm.submatrix_at_filtration(1.0).layout == torch.sparse_coo
+
+    complex_ = Complex(boundaries=[matrix], filtrations=[[0.0, 1.0], [0.0, 1.0]])
+    assert complex_.filtered_boundaries[1].shape == (2, 2)
 
 
 def test_filtration_sorting_enforced():

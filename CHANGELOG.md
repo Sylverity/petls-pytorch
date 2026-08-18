@@ -1,131 +1,54 @@
 # Changelog
 
+## 1.1.2 - 2026-08-17
+
+### Changed
+
+- Separated native implementation tests from optional PETLS parity and benchmark suites, with CI coverage for each.
+- Made benchmark runs failure-aware and reproducible, with consistent output paths and optional analysis tooling.
+- Made profiling device-aware, added synchronized CUDA timing, and tightened core input/query validation.
+- Expanded sparse boundary support and reduced the core installation to its required runtime dependencies.
+- Reworked the README around GPU-enabled workflows, benchmarks, supported APIs, file formats, and advanced algorithm guidance.
+
 ## 1.1.1 - 2026-08-05
 
-### Fixed
+### Changed
 
-- Separated native, PETLS-parity, and benchmark tests with explicit markers and lazy reference loading so missing optional PETLS cannot hide or destabilize implementation coverage.
-- Preserved isolated and zero-restriction sheaf cochain coordinates so disconnected or locally trivial sheaf cohomology is not silently erased.
-- Preserved zero/negative dFlag edges and face-monotone finite filtrations so weighted directed complexes are not silently altered or made invalid.
-- Kept Rips support simplices internal so public dimensions stop at ``max_dim`` while top-dimensional up-Laplacians remain correct, preventing implementation-only simplices from being reported as extra topology.
-- Disabled flipped partial eigensolves so reported Laplacian nullities cannot gain false topological features.
-- Replaced scalar-ARPACK nullspace recovery with a certified block LOBPCG path
-  for feasible ordinary spectra with repeated zero eigenvalues. Sparse topology
-  summaries now cross-check numerical nullity against Gudhi homology, audit
-  residuals and orthogonality, and never report a least-nonzero eigenvalue when
-  the recovered spectrum is incomplete or unverified.
+- Added certified sparse spectral analysis with repeated-nullspace handling and topology cross-checks.
+- Strengthened correctness across weighted Alpha, Rips, directed-flag, sheaf, and flipped top-dimensional Laplacian workflows.
 
 ## 1.1.0 - 2026-08-04
 
 ### Added
 
-- Added weighted Gudhi alpha complexes with general power weights, finite-value
-  validation, negative vertex births, precision selection, construction
-  cutoffs, and optional point labels.
-- Retained Gudhi simplex trees, per-dimension simplex identities, filtration
-  values, and stable simplex-to-matrix index mappings.
-- Added Gudhi-backed `persistence_intervals()`, `betti_numbers_at()`, and
-  `persistent_betti()` inspection APIs.
-- Added `topology_summary()` for authoritative homology, persistent-Laplacian
-  nullity, spectral gaps, tolerances, matrix sizes, and calculation status.
-- Added simplex-mapped harmonic representatives through `harmonic_features()`.
-- Added `estimate_laplacian()`, configurable dense-allocation guards, and a
-  genuinely sparse ordinary Hodge lowest-spectrum path.
+- Introduced weighted Alpha complexes, persistence/topology inspection, harmonic localization, allocation guards, and sparse ordinary spectra.
 
 ### Changed
 
-- Simplified the supported API around native PyTorch concepts. Constructor
-  options use snake case, solver selection has one canonical setter, and
-  device and dtype configuration is exclusively object-local.
-- Filtration enumeration now includes complete zero-dimensional births and
-  merges nearly equal scales with a configurable tolerance.
-- Device, dtype, eigenvalue tolerances, and allocation policies are now
-  object-specific. CPU is the safe default, `device="auto"` is opt-in, and
-  Alpha calculations default to `float64`.
-- Oversized persistent summaries can return authoritative Gudhi homology with
-  explicit `homology_only` status instead of attempting unsafe allocations.
-- Benchmark timing now isolates complex construction, Laplacian construction,
-  and eigensolving. Device and dtype are passed directly to each object and
-  recorded in output rows.
-- Benchmark `--dtype` selection defaults to `float32` for continuity with the
-  published comparison workload.
-- Moved the benchmark-only `tadasets` dependency from the runtime install to
-  dedicated `benchmark` and development extras.
-- Completed static typing cleanup while retaining Python 3.10 as the minimum
-  runtime and analysis target.
-
-### Performance
-
-- Reduced small-matrix overhead with CPU-backed CUDA fallbacks, cached CPU
-  mirrors, NumPy incidence assembly, and efficient sparse boundary handling.
-- Reduced Schur-complement fallback cost with Hermitian pseudoinverses and
-  singular-block trimming.
-- Removed redundant eigenvalue sorting and repeated sparse conversions.
-
-### Fixed
-
-- Corrected weighted zero-dimensional filtration bookkeeping throughout
-  Laplacian construction and filtration enumeration.
-- Guarded the peak Schur-complement intermediate at filtration `b`, not only
-  the final persistent-Laplacian output at filtration `a`.
-- Made default topology summaries dimension-aware and honored every supported
-  sparse eigenvalue-order selection.
-- Guarded the actual flipped top-dimensional allocation, used flipping only
-  when it reduces matrix size, and returned empty summaries above `top_dim`.
-- Clarified oversized harmonic localization behavior and corrected original
-  PETLS benchmark dtype metadata to report `native`.
-- Aligned profiling summaries with object-specific, scale-aware zero
-  tolerances.
-- Ensured benchmark Alpha complexes honor requested device and dtype settings.
+- Consolidated the supported API around native PyTorch objects with object-local device, dtype, tolerance, and solver controls.
+- Improved benchmark coverage, typing, and Python-version support.
 
 ### Removed
 
-- Removed unused C++ solver-name aliases and the no-op up-Laplacian algorithm
-  selector; Schur complementation remains the single implemented method.
-- Removed camel-case solver aliases, the positional `eigenpairs()` request-list
-  overload, and permissive unused keyword handling.
-- Removed mutable process-global device and dtype settings. Pass `device=` and
-  `dtype=` to each complex instead.
-- Removed top-level SciPy re-exports, legacy eigensolver wrappers, and the
-  compatibility-only `up_Algorithms` enum. NumPy, SciPy, and the focused
-  helpers in `petls_pytorch.core` remain directly available from their owning
-  modules.
+- Removed legacy compatibility aliases, global configuration, and unused solver/dependency shims.
 
 ## 1.0.2 - 2026-06-28
 
 ### Changed
 
-- Aligned public package, documentation, and benchmark naming on `petls-pytorch`;
-  the Python import package remains `petls_pytorch`.
-- Updated benchmark presets and reporting for representative Windows CPU/GPU
-  comparisons, including streamed progress, partial CSV/JSON output, skipped
-  rows, and matrix-size caps.
-- Changed benchmark outputs to default under `benchmark-results/`.
+- Standardized package naming, benchmark reporting, and output organization.
 
 ### Fixed
 
-- Fixed Rips complex construction to build the extra simplex dimension needed
-  for top requested Laplacian dimensions, matching original PETLS Betti values.
-- Avoided hidden benchmark setup work by making matrix statistics optional and
-  bounding the representative Rips threshold.
+- Corrected Rips top-dimensional construction and reduced hidden benchmark setup work.
 
 ## 1.0.1 - 2026-06-28
 
-### Fixed
-
-- Fixed `Profile.time_to_csv()` after `spectra()` on vertex-only complexes.
-- Fixed benchmark documentation and CLI usage by using the real `python -m benchmark` entry point.
-- Fixed benchmark dataset generation so the same runner can benchmark either `petls` or `petls-pytorch` via `--package`.
-- Removed deprecated setuptools license metadata that emitted build warnings.
-
 ### Changed
 
-- Removed the hard dependency on `pyflagser`; `dFlag` now parses weighted `.flag` files directly.
-- Replaced brute-force directed flag simplex enumeration with directed clique expansion.
-- Documented the supported `.flag` input format.
-- Declared and tested CPython support for 3.10, 3.11, 3.12, 3.13, and 3.14.
-- Expanded GitHub Actions CI and release test matrices to Python 3.10-3.14.
+- Replaced the `pyflagser` dependency with direct weighted `.flag` parsing and directed clique expansion.
+- Expanded CI and documented the supported Python versions and input format.
 
-### Maintenance
+### Fixed
 
-- Cleaned repository-wide ruff lint findings.
+- Corrected profile export, benchmark entry points, and backend selection.

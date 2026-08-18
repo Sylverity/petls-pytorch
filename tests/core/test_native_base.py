@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 import torch
 
+from petls_pytorch.core.complex import Complex
 from tests.core.test_base import get_small_complex
 
 pytestmark = pytest.mark.native
@@ -56,3 +57,18 @@ def test_small_example_data():
         complex_.filtered_boundaries[1].range_filtrations.cpu(),
         torch.tensor([0.0, 1.0, 2.0], dtype=torch.float64),
     )
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [{"boundaries": []}, {"filtrations": [[0.0]]}],
+)
+def test_complex_rejects_partial_boundary_data(kwargs):
+    with pytest.raises(ValueError, match="provided together"):
+        Complex(**kwargs)
+
+
+def test_spectral_single_query_rejects_missing_filtration_bound():
+    complex_ = get_small_complex()
+    with pytest.raises(ValueError, match="provided together"):
+        complex_.spectra(dim=0, a=0.0)

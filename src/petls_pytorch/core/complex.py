@@ -52,6 +52,8 @@ class Complex:
         Filtration values per dimension. filtrations[dim] is a list of
         filtration values for simplices in dimension dim.
         Must satisfy len(filtrations) == len(boundaries) + 1.
+        ``boundaries`` and ``filtrations`` must be supplied together unless a
+        ``simplex_tree`` is provided to supply the omitted data.
     device : torch.device, optional
         Override global device.
     """
@@ -92,7 +94,11 @@ class Complex:
         self.top_dim: int = 0
         self._boundary_top_dim: int = 0
         self.filtered_boundaries: List[FilteredBoundaryMatrix] = []
-        self.profile = Profile(zero_atol=self.zero_atol, zero_rtol=self.zero_rtol)
+        self.profile = Profile(
+            zero_atol=self.zero_atol,
+            zero_rtol=self.zero_rtol,
+            device=self.device,
+        )
         self.simplex_tree = simplex_tree
         self.simplices_by_dimension: list[list[tuple[int, ...]]] = []
         self.simplex_filtrations: list[list[float]] = []
@@ -104,6 +110,9 @@ class Complex:
         self._eigs_algorithm: str | Callable = "eigvalsh"
         self._num_eigenvalues: int = 10
         self._eigenvalue_order: str = "SM"
+
+        if simplex_tree is None and (boundaries is None) != (filtrations is None):
+            raise ValueError("boundaries and filtrations must be provided together")
 
         if simplex_tree is not None:
             from petls_pytorch.utils.simplex_tree import simplex_tree_boundaries_filtrations
@@ -219,9 +228,10 @@ class Complex:
         import scipy.sparse
 
         if isinstance(x, torch.Tensor):
-            if x.is_sparse:
-                sparse = x.coalesce() if x.layout == torch.sparse_coo else x
-                return sparse.to(dtype=self.dtype)
+            if x.layout == torch.sparse_coo:
+                return x.coalesce().to(dtype=self.dtype)
+            if x.layout == torch.sparse_csr:
+                return cast(torch.Tensor, x.to(dtype=self.dtype).to_sparse_coo().coalesce())
             # Dense tensor -> COO
             return cast(torch.Tensor, x.to(dtype=self.dtype).to_sparse_coo())
         if isinstance(x, np.ndarray):
@@ -818,6 +828,9 @@ class Complex:
             If request_list or no args passed: [(dim, a, b, eigenvalues), ...]
         """
         # Build request list
+        provided_query_args = sum(value is not None for value in (dim, a, b))
+        if provided_query_args not in {0, 3}:
+            raise ValueError("dim, a, and b must be provided together")
         if dim is not None and a is not None and b is not None:
             requests = [(dim, a, b)]
         elif request_list is not None:
@@ -962,6 +975,9 @@ class Complex:
             If request_list or no args passed: [(dim, a, b, eigenvalues, eigenvectors), ...]
         """
         single_query = dim is not None and a is not None and b is not None
+        provided_query_args = sum(value is not None for value in (dim, a, b))
+        if provided_query_args not in {0, 3}:
+            raise ValueError("dim, a, and b must be provided together")
         if dim is not None and a is not None and b is not None:
             requests = [(dim, a, b)]
         elif request_list is not None:

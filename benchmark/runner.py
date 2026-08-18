@@ -45,6 +45,8 @@ class BenchmarkResult:
     complex_build_time_ms: float = 0.0
     skipped: bool = False
     skip_reason: str = ""
+    failed: bool = False
+    failure_reason: str = ""
     dtype: str = "float32"
 
 
@@ -68,14 +70,13 @@ class BenchmarkSuiteResult:
                 writer.writerow(asdict(r))
 
     def summary(self) -> Dict:
-        if not self.results:
-            return {}
-        total_times = [r.total_time_ms for r in self.results]
-        build_times = [r.build_time_ms for r in self.results]
-        eigs_times = [r.eigs_time_ms for r in self.results]
-        sizes = [r.matrix_rows for r in self.results]
-        completed = [r for r in self.results if not r.skipped]
+        completed = [r for r in self.results if not r.skipped and not r.failed]
         skipped = [r for r in self.results if r.skipped]
+        failed = [r for r in self.results if r.failed]
+        total_times = [r.total_time_ms for r in completed]
+        build_times = [r.build_time_ms for r in completed]
+        eigs_times = [r.eigs_time_ms for r in completed]
+        sizes = [r.matrix_rows for r in self.results]
         config_builds: dict[tuple[int, str, int, str, int, int], float] = {}
         for r in self.results:
             key = (r.config_index, r.dataset, r.n_points, r.complex_type, r.max_dim, r.seed)
@@ -86,15 +87,16 @@ class BenchmarkSuiteResult:
             "num_trials": len(self.results),
             "num_completed": len(completed),
             "num_skipped": len(skipped),
+            "num_failed": len(failed),
             "total_time_sec": sum(total_times) / 1000.0,
             "complex_build_time_sec": sum(config_builds.values()) / 1000.0,
-            "mean_total_ms": np.mean(total_times),
-            "median_total_ms": np.median(total_times),
-            "max_total_ms": max(total_times),
-            "mean_build_ms": np.mean(build_times),
-            "mean_eigs_ms": np.mean(eigs_times),
-            "max_matrix_rows": max(sizes),
-            "mean_matrix_rows": int(np.mean(sizes)),
+            "mean_total_ms": float(np.mean(total_times)) if total_times else 0.0,
+            "median_total_ms": float(np.median(total_times)) if total_times else 0.0,
+            "max_total_ms": float(max(total_times)) if total_times else 0.0,
+            "mean_build_ms": float(np.mean(build_times)) if build_times else 0.0,
+            "mean_eigs_ms": float(np.mean(eigs_times)) if eigs_times else 0.0,
+            "max_matrix_rows": max(sizes) if sizes else 0,
+            "mean_matrix_rows": int(np.mean(sizes)) if sizes else 0,
         }
 
     def print_summary(self):
@@ -104,6 +106,7 @@ class BenchmarkSuiteResult:
         print(f"  Trials:          {s['num_trials']}")
         print(f"  Completed:       {s['num_completed']}")
         print(f"  Skipped:         {s['num_skipped']}")
+        print(f"  Failed:          {s['num_failed']}")
         print(f"  Trial time:      {s['total_time_sec']:.2f} s")
         print(f"  Complex builds:  {s['complex_build_time_sec']:.2f} s")
         print(f"  Mean trial:      {s['mean_total_ms']:.1f} ms")
@@ -119,7 +122,7 @@ class BenchmarkRunner:
 
     def __init__(
         self,
-        output_dir: str = "./benchmark_results",
+        output_dir: str = "./benchmark-results/results",
         algorithm: str = "eigvalsh",
         device: str = "cpu",
         package: str = "petls-pytorch",
@@ -357,6 +360,44 @@ class BenchmarkRunner:
 
         results: List[BenchmarkResult] = []
 
+        def record_failure(
+            stage: str,
+            error: Exception,
+            matrix_rows: int,
+            build_time_ms: float,
+            eigs_time_ms: float = 0.0,
+        ) -> None:
+            result = BenchmarkResult(
+                package=package,
+                dataset=dataset_name,
+                n_points=n_points,
+                complex_type=complex_type,
+                max_dim=max_dim,
+                dim=dim,
+                filtration_a=round(a, 6),
+                filtration_b=round(b, 6),
+                matrix_rows=matrix_rows,
+                build_time_ms=build_time_ms,
+                eigs_time_ms=eigs_time_ms,
+                total_time_ms=build_time_ms + eigs_time_ms,
+                algorithm=self.algorithm,
+                device=self.device,
+                dtype=reported_dtype,
+                seed=seed,
+                config_index=config_index,
+                request_index=request_index,
+                complex_build_time_ms=t_build_complex,
+                failed=True,
+                failure_reason=f"{stage}: {type(error).__name__}: {error}",
+            )
+            results.append(result)
+            if on_result is not None:
+                on_result(result)
+            self._print(
+                f"  [{request_index:02d}/{len(requests):02d}] dim={dim} "
+                f"a={a:.4f} b={b:.4f} | FAILED {result.failure_reason}"
+            )
+
         row_cap = max_matrix_rows if max_matrix_rows is not None else self.max_matrix_rows
         for request_index, (dim, a, b) in enumerate(requests, start=1):
             rows_estimate = self._estimate_matrix_rows(complex_obj, dim, a)
@@ -396,7 +437,12 @@ class BenchmarkRunner:
             try:
                 L = complex_obj.get_L(dim, a, b)
             except Exception as e:
-                self._print(f"    ERROR get_L(dim={dim}, a={a:.4f}, b={b:.4f}): {e}")
+                record_failure(
+                    "get_L",
+                    e,
+                    rows_estimate or 0,
+                    (time.perf_counter() - t0) * 1000,
+                )
                 continue
             self._synchronize(package)
             t_build = (time.perf_counter() - t0) * 1000
@@ -447,7 +493,13 @@ class BenchmarkRunner:
                     self._synchronize(package)
                     t_eigs = (time.perf_counter() - t0) * 1000
             except Exception as e:
-                self._print(f"    ERROR eigs(dim={dim}, a={a:.4f}, b={b:.4f}): {e}")
+                record_failure(
+                    "eigs",
+                    e,
+                    rows,
+                    t_build,
+                    (time.perf_counter() - t0) * 1000 if rows else 0.0,
+                )
                 continue
 
             betti, lam = complex_obj.eigenvalues_summarize(eigs)
@@ -540,7 +592,7 @@ def run_single_benchmark(
     algorithm: str = "eigvalsh",
     package: str = "petls-pytorch",
     device: str = "cpu",
-    output_dir: str = "./benchmark_results",
+    output_dir: str = "./benchmark-results/results",
     seed: int = 42,
     dtype: str = "float32",
 ) -> BenchmarkSuiteResult:

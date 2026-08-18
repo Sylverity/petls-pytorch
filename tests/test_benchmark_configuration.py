@@ -9,7 +9,7 @@ import pytest
 import torch
 
 from benchmark.datasets import generate_dataset
-from benchmark.runner import BenchmarkRunner
+from benchmark.runner import BenchmarkResult, BenchmarkRunner, BenchmarkSuiteResult
 
 pytestmark = pytest.mark.benchmark
 
@@ -110,3 +110,100 @@ def test_reference_petls_reports_native_dtype_for_metadata_and_skipped_rows(
     assert len(results) == 1
     assert results[0].skipped
     assert results[0].dtype == "native"
+
+
+class _FakeComplex:
+    top_dim = 0
+
+    def set_eigs_algorithm(self, algorithm):
+        self.algorithm = algorithm
+
+
+def _fake_dataset(complex_obj):
+    return {
+        "complex": complex_obj,
+        "filtrations": [0.0, 1.0],
+        "num_unique_filtrations": 2,
+    }
+
+
+def test_benchmark_records_laplacian_failures_and_reports_them(monkeypatch, tmp_path):
+    class FailingLaplacian(_FakeComplex):
+        def get_L(self, dim, a, b):
+            raise RuntimeError("matrix construction failed")
+
+    monkeypatch.setattr(
+        "benchmark.datasets.generate_dataset",
+        lambda **kwargs: _fake_dataset(FailingLaplacian()),
+    )
+    runner = BenchmarkRunner(output_dir=str(tmp_path), verbose=False)
+    runner._prepare_backend = lambda package: None
+
+    results = runner.run_trial(
+        dataset_name="fake",
+        n_points=2,
+        max_dim=0,
+        dims=[0],
+        include_final_request=False,
+    )
+
+    assert len(results) == 1
+    assert results[0].failed
+    assert not results[0].skipped
+    assert "matrix construction failed" in results[0].failure_reason
+    summary = BenchmarkSuiteResult("failed", results).summary()
+    assert summary["num_failed"] == 1
+    assert summary["num_completed"] == 0
+    assert summary["mean_total_ms"] == 0.0
+    BenchmarkSuiteResult("failed", results).print_summary()
+
+
+def test_benchmark_records_eigensolver_failures(monkeypatch, tmp_path):
+    class FailingEigensolver(_FakeComplex):
+        def get_L(self, dim, a, b):
+            return torch.zeros((2, 2))
+
+        def _solve_eigs(self, matrix):
+            raise ValueError("eigensolver failed")
+
+    monkeypatch.setattr(
+        "benchmark.datasets.generate_dataset",
+        lambda **kwargs: _fake_dataset(FailingEigensolver()),
+    )
+    runner = BenchmarkRunner(output_dir=str(tmp_path), verbose=False)
+    runner._prepare_backend = lambda package: None
+
+    results = runner.run_trial(
+        dataset_name="fake",
+        n_points=2,
+        max_dim=0,
+        dims=[0],
+        include_final_request=False,
+    )
+
+    assert len(results) == 1
+    assert results[0].failed
+    assert results[0].matrix_rows == 2
+    assert "eigensolver failed" in results[0].failure_reason
+
+
+def test_benchmark_summary_excludes_skipped_and_handles_empty_suite():
+    common = dict(
+        package="fake",
+        dataset="fake",
+        n_points=2,
+        complex_type="alpha",
+        max_dim=0,
+        dim=0,
+        filtration_a=0.0,
+        filtration_b=1.0,
+    )
+    completed = BenchmarkResult(matrix_rows=3, total_time_ms=100.0, **common)
+    skipped = BenchmarkResult(matrix_rows=99, skipped=True, **common)
+    summary = BenchmarkSuiteResult("mixed", [completed, skipped]).summary()
+    assert summary["num_completed"] == 1
+    assert summary["num_skipped"] == 1
+    assert summary["mean_total_ms"] == 100.0
+    assert summary["max_matrix_rows"] == 99
+    assert BenchmarkSuiteResult("empty").summary()["num_trials"] == 0
+    BenchmarkSuiteResult("empty").print_summary()
