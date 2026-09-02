@@ -18,7 +18,7 @@ The project supports CPython 3.10 through 3.14. The quickest setup uses
 ```bash
 git clone https://github.com/Sylverity/petls-pytorch.git
 cd petls-pytorch
-uv sync --extra dev
+uv sync --frozen --extra dev
 ```
 
 An ordinary virtual environment also works:
@@ -34,22 +34,23 @@ python -m pip install -e ".[dev]"
 Run the same core checks used by continuous integration:
 
 ```bash
-uv run pytest -m "not parity"
-uv run ruff format --check .
-uv run ruff check .
-uv run mypy src/petls_pytorch benchmark
+uv run --frozen pytest -m "not parity"
+uv run --frozen ruff format --check .
+uv run --frozen ruff check .
+uv run --frozen mypy src/petls_pytorch benchmark
 ```
 
 The parity suite requires the reference PETLS package:
 
 ```bash
-uv run --with petls==1.0.1 pytest -m parity
+uv sync --frozen --extra dev --extra parity
+uv run --frozen pytest -m parity
 ```
 
 To measure coverage locally:
 
 ```bash
-uv run pytest -m "not parity" --cov=petls_pytorch --cov-report=term-missing
+uv run --frozen pytest -m "not parity" --cov=petls_pytorch --cov-report=term-missing
 ```
 
 ## Pull requests
@@ -67,4 +68,3 @@ guarantees stable.
 ## Reporting conduct concerns
 
 Participation in this project is governed by [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
-

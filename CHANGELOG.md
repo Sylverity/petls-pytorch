@@ -9,6 +9,8 @@
 - Dependabot updates for Python and GitHub Actions dependencies.
 - CodeQL, dependency review, OpenSSF Scorecard, and coverage enforcement in CI.
 - Build-provenance attestations and automatic distribution attachments for GitHub releases.
+- Reproducible, lockfile-backed CI and release environments using `uv`.
+- A patched Pillow floor for the optional analysis stack.
 
 ### Changed
 

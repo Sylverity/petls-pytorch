@@ -35,27 +35,32 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip
-          cache-dependency-path: pyproject.toml
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
 
       - name: Install package
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
+        env:
+          UV_PYTHON: ${{ matrix.python-version }}
+          UV_PYTHON_DOWNLOADS: never
+        run: uv sync --frozen --extra dev
 
       - name: Run tests
-        run: python -m pytest -m "not parity"
+        run: uv run --frozen python -m pytest -m "not parity"
 
       - name: Check formatting
         if: matrix.python-version == '3.13'
-        run: python -m ruff format --check .
+        run: uv run --frozen ruff format --check .
 
       - name: Run lint
         if: matrix.python-version == '3.13'
-        run: python -m ruff check .
+        run: uv run --frozen ruff check .
 
       - name: Run mypy
-        run: python -m mypy src/petls_pytorch benchmark
+        run: uv run --frozen mypy src/petls_pytorch benchmark
 
   parity:
     name: PETLS parity
@@ -69,16 +74,21 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
-          cache: pip
-          cache-dependency-path: pyproject.toml
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
 
       - name: Install package and reference PETLS
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]" petls==1.0.1
+        env:
+          UV_PYTHON: "3.13"
+          UV_PYTHON_DOWNLOADS: never
+        run: uv sync --frozen --extra dev --extra parity
 
       - name: Run parity tests
-        run: python -m pytest -m parity
+        run: uv run --frozen python -m pytest -m parity
 
   build:
     name: Build distributions
@@ -98,8 +108,18 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-          cache: pip
-          cache-dependency-path: pyproject.toml
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install build environment
+        env:
+          UV_PYTHON: "3.12"
+          UV_PYTHON_DOWNLOADS: never
+        run: uv sync --frozen --extra dev
 
       - name: Validate tag matches package version
         run: |
@@ -125,9 +145,7 @@ jobs:
           PY
 
       - name: Build distributions
-        run: |
-          python -m pip install --upgrade pip build
-          python -m build
+        run: uv run --frozen python -m build --no-isolation
 
       - name: Attest distributions
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
