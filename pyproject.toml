@@ -43,6 +43,7 @@ analysis = [
 dev = [
     "pytest>=7.4.0",
     "pytest-benchmark>=4.0.0",
+    "pytest-cov>=7.0.0",
     "ruff==0.16.1",
     "mypy==2.1.0",
     "tadasets>=0.2.0",
@@ -51,6 +52,9 @@ dev = [
 [project.urls]
 Homepage = "https://github.com/Sylverity/petls-pytorch"
 Repository = "https://github.com/Sylverity/petls-pytorch"
+Documentation = "https://github.com/Sylverity/petls-pytorch#readme"
+Changelog = "https://github.com/Sylverity/petls-pytorch/blob/main/CHANGELOG.md"
+Issues = "https://github.com/Sylverity/petls-pytorch/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -69,6 +73,15 @@ markers = [
     "parity: compare petls-pytorch against the installed original PETLS package",
     "benchmark: validate benchmark configuration and harness behavior",
 ]
+
+[tool.coverage.run]
+branch = true
+source = ["petls_pytorch"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = true
 
 [tool.ruff]
 line-length = 100

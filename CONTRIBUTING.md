@@ -1,0 +1,70 @@
+# Contributing to petls-pytorch
+
+Thank you for helping improve `petls-pytorch`. Bug reports, documentation fixes, tests,
+benchmarks, and focused implementation changes are all welcome.
+
+## Before opening an issue
+
+- Search existing issues and discussions for related work.
+- Use a minimal, reproducible example for bugs.
+- For security vulnerabilities, follow [SECURITY.md](SECURITY.md) instead of opening a public
+  issue.
+
+## Development setup
+
+The project supports CPython 3.10 through 3.14. The quickest setup uses
+[uv](https://docs.astral.sh/uv/):
+
+```bash
+git clone https://github.com/Sylverity/petls-pytorch.git
+cd petls-pytorch
+uv sync --extra dev
+```
+
+An ordinary virtual environment also works:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev]"
+```
+
+## Running checks
+
+Run the same core checks used by continuous integration:
+
+```bash
+uv run pytest -m "not parity"
+uv run ruff format --check .
+uv run ruff check .
+uv run mypy src/petls_pytorch benchmark
+```
+
+The parity suite requires the reference PETLS package:
+
+```bash
+uv run --with petls==1.0.1 pytest -m parity
+```
+
+To measure coverage locally:
+
+```bash
+uv run pytest -m "not parity" --cov=petls_pytorch --cov-report=term-missing
+```
+
+## Pull requests
+
+- Keep each pull request focused on one coherent change.
+- Add or update tests for behavior changes and regressions.
+- Update `README.md`, `CHANGELOG.md`, and public docstrings when user-facing behavior changes.
+- Preserve CPU behavior when changing CUDA paths, and test device and dtype handling explicitly.
+- Include benchmark evidence for performance claims.
+- Do not commit generated distributions, caches, profiles, or benchmark output.
+
+Maintainers may request changes to keep the numerical API, PETLS parity, and sparse-allocation
+guarantees stable.
+
+## Reporting conduct concerns
+
+Participation in this project is governed by [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+
