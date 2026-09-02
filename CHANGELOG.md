@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Contribution, conduct, governance, support, and private security-reporting guidance.
+- Structured issue forms, a pull-request template, and default code owners.
+- Dependabot updates for Python and GitHub Actions dependencies.
+- CodeQL, dependency review, OpenSSF Scorecard, and coverage enforcement in CI.
+- Build-provenance attestations and automatic distribution attachments for GitHub releases.
+
+### Changed
+
+- Expanded package links and corrected the 1.1.2 citation release date.
+
 ## 1.1.2 - 2026-08-17
 
 ### Changed

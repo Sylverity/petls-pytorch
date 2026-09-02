@@ -1,0 +1,55 @@
+name: Bug report
+description: Report a reproducible defect or regression
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a problem. Do not include sensitive security details here; use the private security-reporting link instead.
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include the smallest runnable Python example and complete traceback.
+      render: python
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: petls-pytorch version
+      placeholder: "1.1.2"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Python, PyTorch, operating system, device, CUDA, and dtype details
+      placeholder: "Python 3.13, PyTorch 2.x, Ubuntu, CUDA 13, float64"
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Add logs, profiles, sample inputs, or other relevant information.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues for duplicates.
+          required: true
+        - label: I removed secrets and private data from this report.
+          required: true
+

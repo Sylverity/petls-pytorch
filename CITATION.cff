@@ -10,7 +10,7 @@ authors:
   - name: "Sylverity Research"
 repository-code: "https://github.com/Sylverity/petls-pytorch"
 license: Apache-2.0
-date-released: "2026-08-05"
+date-released: "2026-08-18"
 references:
   - type: article
     title: "PETLS: PErsistent Topological Laplacian Software"

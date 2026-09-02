@@ -2,6 +2,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/petls-pytorch.svg)](https://pypi.org/project/petls-pytorch/)
 [![CI](https://github.com/Sylverity/petls-pytorch/actions/workflows/ci.yml/badge.svg)](https://github.com/Sylverity/petls-pytorch/actions/workflows/ci.yml)
+[![Security](https://github.com/Sylverity/petls-pytorch/actions/workflows/security.yml/badge.svg)](https://github.com/Sylverity/petls-pytorch/actions/workflows/security.yml)
 [![Python](https://img.shields.io/pypi/pyversions/petls-pytorch.svg)](https://pypi.org/project/petls-pytorch/)
 [![License](https://img.shields.io/pypi/l/petls-pytorch.svg)](LICENSE)
 
@@ -240,7 +241,10 @@ The implementation is clean-room and independent: it uses the public PETLS API, 
 
 ## Contributing
 
-Issues and pull requests are welcome at https://github.com/Sylverity/petls-pytorch/issues.
+Issues and pull requests are welcome. See
+[CONTRIBUTING.md](https://github.com/Sylverity/petls-pytorch/blob/main/CONTRIBUTING.md) for the
+development setup and validation checklist. Please report suspected vulnerabilities privately by
+following [SECURITY.md](https://github.com/Sylverity/petls-pytorch/blob/main/SECURITY.md).
 
 ## License
 
