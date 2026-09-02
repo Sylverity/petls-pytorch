@@ -39,14 +39,21 @@ benchmark = [
 ]
 analysis = [
     "matplotlib>=3.7.0",
+    "pillow>=12.3.0",
+]
+parity = [
+    "petls==1.0.1",
 ]
 dev = [
+    "build==1.6.0",
     "pytest>=7.4.0",
     "pytest-benchmark>=4.0.0",
     "pytest-cov>=7.0.0",
     "ruff==0.16.5",
     "mypy==2.3.1",
+    "setuptools==84.0.0",
     "tadasets>=0.2.0",
+    "wheel==0.48.0",
 ]
 
 [project.urls]

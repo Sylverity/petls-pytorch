@@ -53,6 +53,3 @@ benchmarks/results/
 
 # Notebook checkpoints
 .ipynb_checkpoints/
-
-# uv lockfile (library projects should not commit this)
-uv.lock
