@@ -4,7 +4,7 @@
 
 ### Added
 
-- Contribution, conduct, governance, support, and private security-reporting guidance.
+- Contribution guidance for issues, development, and pull requests.
 - Structured issue forms, a pull-request template, and default code owners.
 - Dependabot updates for Python and GitHub Actions dependencies.
 - CodeQL, dependency review, OpenSSF Scorecard, and coverage enforcement in CI.

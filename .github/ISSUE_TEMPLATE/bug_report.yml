@@ -7,7 +7,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thank you for reporting a problem. Do not include sensitive security details here; use the private security-reporting link instead.
+        Thank you for reporting a problem. Please do not include secrets or private data.
   - type: textarea
     id: description
     attributes:
@@ -52,4 +52,3 @@ body:
           required: true
         - label: I removed secrets and private data from this report.
           required: true
-

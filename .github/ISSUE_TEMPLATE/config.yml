@@ -3,7 +3,3 @@ contact_links:
   - name: Questions and ideas
     url: https://github.com/Sylverity/petls-pytorch/discussions
     about: Ask usage questions or discuss early-stage ideas.
-  - name: Security vulnerability
-    url: https://github.com/Sylverity/petls-pytorch/security/advisories/new
-    about: Report security vulnerabilities privately.
-

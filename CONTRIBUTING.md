@@ -7,8 +7,6 @@ benchmarks, and focused implementation changes are all welcome.
 
 - Search existing issues and discussions for related work.
 - Use a minimal, reproducible example for bugs.
-- For security vulnerabilities, follow [SECURITY.md](SECURITY.md) instead of opening a public
-  issue.
 
 ## Development setup
 
@@ -64,7 +62,3 @@ uv run --frozen pytest -m "not parity" --cov=petls_pytorch --cov-report=term-mis
 
 Maintainers may request changes to keep the numerical API, PETLS parity, and sparse-allocation
 guarantees stable.
-
-## Reporting conduct concerns
-
-Participation in this project is governed by [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).

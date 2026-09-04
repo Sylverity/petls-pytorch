@@ -149,8 +149,7 @@ foundational persistent-Laplacian work of Ben Jones, Guo-Wei Wei, and the
 parity tests cover common workflows without incorporating original source code.
 
 Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for
-development setup and checks, and [SECURITY.md](SECURITY.md) for private
-vulnerability reporting. Licensed under [Apache-2.0](LICENSE).
+development setup and checks. Licensed under [Apache-2.0](LICENSE).
 
 ## Citation
 
