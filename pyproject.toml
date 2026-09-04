@@ -38,6 +38,7 @@ benchmark = [
     "tadasets>=0.2.0",
 ]
 analysis = [
+    "gemmi>=0.7.0",
     "matplotlib>=3.7.0",
     "pillow>=12.3.0",
 ]
