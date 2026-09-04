@@ -4,17 +4,12 @@
 
 ### Added
 
-- Contribution guidance for issues, development, and pull requests.
-- Structured issue forms, a pull-request template, and default code owners.
-- Dependabot updates for Python and GitHub Actions dependencies.
-- CodeQL, dependency review, OpenSSF Scorecard, and coverage enforcement in CI.
-- Build-provenance attestations and automatic distribution attachments for GitHub releases.
-- Reproducible, lockfile-backed CI and release environments using `uv`.
-- A patched Pillow floor for the optional analysis stack.
+- Reproducible topology and molecular-crystal demos.
 
 ### Changed
 
-- Expanded package links and corrected the 1.1.2 citation release date.
+- Updated the README with a clearer introduction, benchmarks, and streamlined technical details.
+- Simplified repository security and maintenance settings.
 
 ## 1.1.2 - 2026-08-17
 
