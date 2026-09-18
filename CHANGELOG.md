@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Fixed
+
+- Preserved small positive eigenvalues and their multiplicities using the configured zero tolerance in `nonzero_spectra()`.
+- Cleared obsolete topology and geometric mappings when replacing boundaries, while preserving the original complex on invalid updates.
+- Included rectangular boundary allocations in dense memory guards.
+- Kept batch spectrum results consistent for empty and single-request batches, including file export.
+
 ### Added
 
 - Reproducible topology and molecular-crystal demos.
