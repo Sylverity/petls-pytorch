@@ -46,7 +46,7 @@ jobs:
         env:
           UV_PYTHON: ${{ matrix.python-version }}
           UV_PYTHON_DOWNLOADS: never
-        run: uv sync --frozen --extra dev
+        run: uv sync --locked --extra dev
 
       - name: Run tests
         run: uv run --frozen python -m pytest -m "not parity"
@@ -85,7 +85,7 @@ jobs:
         env:
           UV_PYTHON: "3.13"
           UV_PYTHON_DOWNLOADS: never
-        run: uv sync --frozen --extra dev --extra parity
+        run: uv sync --locked --extra dev --extra parity
 
       - name: Run parity tests
         run: uv run --frozen python -m pytest -m parity
@@ -119,7 +119,7 @@ jobs:
         env:
           UV_PYTHON: "3.12"
           UV_PYTHON_DOWNLOADS: never
-        run: uv sync --frozen --extra dev
+        run: uv sync --locked --extra dev
 
       - name: Validate tag matches package version
         run: |

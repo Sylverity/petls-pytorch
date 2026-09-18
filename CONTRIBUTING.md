@@ -16,8 +16,11 @@ The project supports CPython 3.10 through 3.14. The quickest setup uses
 ```bash
 git clone https://github.com/Sylverity/petls-pytorch.git
 cd petls-pytorch
-uv sync --frozen --extra dev
+uv sync --locked --extra dev
 ```
+
+When changing dependencies in `pyproject.toml`, run `uv lock` and commit the updated
+`uv.lock` alongside the manifest. CI rejects an out-of-date lockfile.
 
 An ordinary virtual environment also works:
 
@@ -41,7 +44,7 @@ uv run --frozen mypy src/petls_pytorch benchmark
 The parity suite requires the reference PETLS package:
 
 ```bash
-uv sync --frozen --extra dev --extra parity
+uv sync --locked --extra dev --extra parity
 uv run --frozen pytest -m parity
 ```
 
