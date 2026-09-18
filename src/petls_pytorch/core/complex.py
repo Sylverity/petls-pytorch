@@ -99,7 +99,7 @@ class Complex:
             zero_rtol=self.zero_rtol,
             device=self.device,
         )
-        self.simplex_tree = simplex_tree
+        self.simplex_tree: Any = None
         self.simplices_by_dimension: list[list[tuple[int, ...]]] = []
         self.simplex_filtrations: list[list[float]] = []
         self.simplex_to_index: list[dict[tuple[int, ...], int]] = []
@@ -117,6 +117,8 @@ class Complex:
         if simplex_tree is not None:
             from petls_pytorch.utils.simplex_tree import simplex_tree_boundaries_filtrations
 
+            # Boundary coordinates and persistence must describe one snapshot.
+            simplex_tree = simplex_tree.copy()
             extracted = simplex_tree_boundaries_filtrations(
                 simplex_tree,
                 return_simplices=True,
@@ -126,21 +128,21 @@ class Complex:
                 boundaries = extracted_boundaries
             if filtrations is None:
                 filtrations = extracted_filtrations
-            self.simplices_by_dimension = simplices
-            self.simplex_filtrations = [list(values) for values in extracted_filtrations]
-            self.simplex_to_index = [
-                {simplex: index for index, simplex in enumerate(values)} for values in simplices
-            ]
 
         if boundaries is not None and filtrations is not None:
             self.set_boundaries_filtrations(boundaries, filtrations)
-            if not self.simplex_filtrations:
-                self.simplex_filtrations = [list(map(float, values)) for values in filtrations]
         else:
             # Empty complex — user will set later
             self.filtered_boundaries = []
             self.top_dim = 0
             self._boundary_top_dim = 0
+
+        if simplex_tree is not None:
+            self.simplex_tree = simplex_tree
+            self.simplices_by_dimension = simplices
+            self.simplex_to_index = [
+                {simplex: index for index, simplex in enumerate(values)} for values in simplices
+            ]
 
         self.set_eigs_algorithm(eigs_algorithm)
 
@@ -170,15 +172,17 @@ class Complex:
 
         boundaries[i] is d_{i+1} with shape (n_{i}, n_{i+1}).
         filtrations[i] is the filtration list for dimension i.
+
+        A successful replacement discards the previous simplex tree, geometric
+        labels, persistence state, and profiling history. Raw matrices do not
+        identify simplices. Invalid replacement data leaves the object intact.
         """
         if len(filtrations) != len(boundaries) + 1:
             raise ValueError(
                 f"len(filtrations)={len(filtrations)} must be len(boundaries)+1={len(boundaries) + 1}"
             )
 
-        self.filtered_boundaries = []
-        self._boundary_top_dim = len(boundaries)
-        self.top_dim = self._boundary_top_dim
+        filtered_boundaries = []
 
         # d_0 placeholder aligns indexing with the original PETLS Complex, but
         # its metadata must contain every actual vertex birth (including
@@ -197,7 +201,7 @@ class Complex:
             range_filtrations=vertex_filtrations,
             device=self.device,
         )
-        self.filtered_boundaries.append(dummy)
+        filtered_boundaries.append(dummy)
 
         for dim, (B, f_dom, f_rng) in enumerate(
             zip(boundaries, filtrations[1:], filtrations[:-1]), start=1
@@ -221,7 +225,21 @@ class Complex:
                 range_filtrations=range_f,
                 device=self.device,
             )
-            self.filtered_boundaries.append(fbm)
+            filtered_boundaries.append(fbm)
+
+        self.filtered_boundaries = filtered_boundaries
+        self._boundary_top_dim = len(boundaries)
+        self.top_dim = self._boundary_top_dim
+        self.simplex_tree = None
+        self._persistence_computed = False
+        self.simplices_by_dimension = []
+        self.simplex_to_index = []
+        self.simplex_filtrations = [list(map(float, values)) for values in filtrations]
+        self.point_labels = None
+        self.simplex_labels_by_dimension = None
+        self.profile = Profile(
+            zero_atol=self.zero_atol, zero_rtol=self.zero_rtol, device=self.device
+        )
 
     def _ensure_sparse_tensor(self, x) -> torch.Tensor:
         """Convert numpy array, scipy sparse, or torch dense to torch sparse COO."""
@@ -287,21 +305,33 @@ class Complex:
         return self.filtered_boundaries[dim].index_of_filtration(True, scale) + 1
 
     def estimate_laplacian(self, dim: int, a: float, b: float | None = None) -> dict[str, Any]:
-        """Estimate final and peak-intermediate dense Laplacian allocations."""
+        """Bound the largest individual dense construction matrix, not total RAM.
+
+        Boundary storage is included conservatively even when a sparse Gram
+        product may avoid it: the dense fallback must obey the same limit.
+        Eigensolver workspace and simultaneous allocations are not estimated.
+        """
         b = a if b is None else b
         if b < a:
             raise ValueError("b must be greater than or equal to a")
         rows = self._laplacian_rows(dim, a)
         intermediate_rows = rows
-        if dim <= self.top_dim and dim + 1 < len(self.filtered_boundaries):
+        boundary_elements = 0
+        if rows and dim > 0:
+            boundary = self.filtered_boundaries[dim]
+            boundary_elements = (boundary.index_of_filtration(False, a) + 1) * rows
+        if rows and dim <= self.top_dim and dim + 1 < len(self.filtered_boundaries):
             coboundary = self.filtered_boundaries[dim + 1]
-            if coboundary.index_of_filtration(True, b) >= 0:
+            columns = coboundary.index_of_filtration(True, b) + 1
+            if columns:
                 intermediate_rows = coboundary.index_of_filtration(False, b) + 1
+                boundary_elements = max(boundary_elements, intermediate_rows * columns)
         peak_rows = max(rows, intermediate_rows)
         element_size = torch.empty((), dtype=self.dtype).element_size()
         dense_bytes = rows * rows * element_size
         intermediate_dense_bytes = intermediate_rows * intermediate_rows * element_size
-        peak_dense_bytes = max(dense_bytes, intermediate_dense_bytes)
+        boundary_dense_bytes = boundary_elements * element_size
+        peak_dense_bytes = max(dense_bytes, intermediate_dense_bytes, boundary_dense_bytes)
         exceeds_rows = self.max_matrix_rows is not None and peak_rows > self.max_matrix_rows
         exceeds_bytes = (
             self.max_matrix_bytes is not None and peak_dense_bytes > self.max_matrix_bytes
@@ -323,6 +353,7 @@ class Complex:
             "dtype": str(self.dtype).removeprefix("torch."),
             "dense_bytes": dense_bytes,
             "intermediate_dense_bytes": intermediate_dense_bytes,
+            "boundary_dense_bytes": boundary_dense_bytes,
             "peak_dense_bytes": peak_dense_bytes,
             "within_dense_limits": within_dense_limits,
             "exceeds_max_matrix_rows": exceeds_rows,
@@ -827,7 +858,8 @@ class Complex:
         list[tuple]
             If request_list or no args passed: [(dim, a, b, eigenvalues), ...]
         """
-        # Build request list
+        # Scalar and batch calls have distinct, stable return types.
+        single_query = dim is not None and a is not None and b is not None
         provided_query_args = sum(value is not None for value in (dim, a, b))
         if provided_query_args not in {0, 3}:
             raise ValueError("dim, a, and b must be provided together")
@@ -845,6 +877,8 @@ class Complex:
 
         responses = []
         for d, fa, fb in requests:
+            if fb < fa:
+                raise ValueError("b must be greater than or equal to a")
             self.profile.start_all()
 
             # Edge case: no 1-simplices and dim == 0
@@ -942,7 +976,7 @@ class Complex:
 
             responses.append((d, fa, fb, eigs_list))
 
-        if len(responses) == 1:
+        if single_query and len(responses) == 1:
             return responses[0][3]
         return responses
 
@@ -1037,6 +1071,7 @@ class Complex:
             raise RuntimeError("This operation requires construction from a Gudhi SimplexTree")
         if not self._persistence_computed:
             self.simplex_tree.persistence(
+                homology_coeff_field=11,
                 min_persistence=-1.0,
                 persistence_dim_max=True,
             )
@@ -1374,58 +1409,63 @@ class Complex:
         PH_basis=None,
         use_dummy_harmonic_basis: bool = True,
     ):
-        """Compute only the nonzero eigenvalues of L^{dim}(a,b).
+        """Return the complete positive spectrum using this object's zero test.
 
-        Parameters
-        ----------
-        dim, a, b : int, float, float
-            Dimension and filtration values.
-        PH_basis : np.ndarray or torch.Tensor, optional
-            Basis for the null space of the Laplacian (e.g. from persistent
-            homology). If given, the Laplacian is projected onto the
-            orthogonal complement of this basis.
-        use_dummy_harmonic_basis : bool
-            If True and ``PH_basis`` is None, compute the null space of the
-            Laplacian directly and project onto its orthogonal complement.
+        An eigenvalue is retained exactly when ``lambda > zero_atol +
+        zero_rtol * max(abs(full_spectrum))``. Multiplicity and ascending order
+        are preserved. The configured partial solver does not truncate this
+        operation.
 
-        Returns
-        -------
-        list[float]
-            Nonzero eigenvalues, sorted ascending.
+        ``PH_basis`` may contain real harmonic vectors as columns (a vector is
+        treated as one column). Redundant and zero columns are allowed; the
+        numerical column space must lie in the kernel within the zero tolerance
+        or floating-point roundoff, whichever is larger. Invalid vectors raise
+        ``ValueError`` instead of projecting away positive modes. A homology
+        cycle is not necessarily a harmonic vector.
+
+        ``use_dummy_harmonic_basis`` is retained for compatibility. Both values
+        now filter the same complete spectrum directly: projecting out a true
+        kernel cannot change the positive eigenvalues.
         """
+        from petls_pytorch.core.eigenvalues import solve_eigenvalues
 
         L = self.get_L(dim, a, b)
-        if L.numel() == 0:
-            return []
-
-        L_np = L.cpu().numpy()
+        values = solve_eigenvalues(L)
+        values_np = values.detach().cpu().numpy()
+        tolerance = self._zero_tolerance(values_np)
 
         if PH_basis is not None:
-            basis = np.atleast_2d(PH_basis)
-            # Project onto orthogonal complement of basis columns
-            Q, _ = np.linalg.qr(basis)
-            P = np.eye(L_np.shape[0]) - Q @ Q.T
-            L_proj = P @ L_np @ P.T
-        elif use_dummy_harmonic_basis:
-            # Compute null space via SVD of L
-            u, s, vh = np.linalg.svd(L_np)
-            tol = 1e-8
-            rank = int(np.sum(s > tol))
-            null_dim = L_np.shape[0] - rank
-            if null_dim == 0:
-                L_proj = L_np
-            else:
-                Q = u[:, rank:]
-                P = np.eye(L_np.shape[0]) - Q @ Q.T
-                L_proj = P @ L_np @ P.T
-        else:
-            L_proj = L_np
+            raw_basis = torch.as_tensor(
+                PH_basis if isinstance(PH_basis, torch.Tensor) else np.asarray(PH_basis),
+                device=self.device,
+            )
+            if raw_basis.is_complex():
+                raise ValueError("PH_basis must contain real harmonic vectors")
+            basis = raw_basis.to(dtype=self.dtype)
+            if basis.ndim == 1:
+                basis = basis[:, None]
+            if basis.ndim != 2 or basis.shape[0] != L.shape[0]:
+                raise ValueError("PH_basis must have one row per Laplacian coordinate")
+            if not bool(torch.isfinite(basis).all()):
+                raise ValueError("PH_basis must contain only finite values")
+            if basis.numel():
+                # Normalize columns before determining their span: changing the
+                # scale of a basis vector must not hide a non-harmonic direction.
+                column_scale = basis.abs().amax(dim=0)
+                basis = basis[:, column_scale > 0] / column_scale[column_scale > 0]
+                if basis.shape[1]:
+                    u, singular_values, _ = torch.linalg.svd(basis, full_matrices=False)
+                    rank_tolerance = (
+                        torch.finfo(self.dtype).eps * max(basis.shape) * singular_values[0]
+                    )
+                    Q = u[:, singular_values > rank_tolerance]
+                    spectral_scale = float(np.max(np.abs(values_np)))
+                    roundoff = torch.finfo(self.dtype).eps * L.shape[0] * spectral_scale
+                    residual = torch.linalg.matrix_norm(L @ Q, ord=2)
+                    if float(residual) > max(tolerance, roundoff):
+                        raise ValueError("PH_basis must span harmonic vectors in the kernel of L")
 
-        # Eigenvalues of projected matrix
-        eigs = np.linalg.eigvalsh(L_proj)
-        tol = 1e-4
-        nonzero = eigs[eigs > tol]
-        return nonzero.tolist()
+        return cast(list[float], values_np[values_np > tolerance].tolist())
 
     def store_L(self, dim: int, a: float, b: float, prefix: str) -> None:
         """Save the Laplacian matrix L^{dim}(a,b) to a Matrix Market file.

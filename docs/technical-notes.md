@@ -71,6 +71,15 @@ Gudhi persistence is the authoritative homology source when available.
 spectral gaps, tolerances, matrix sizes, and calculation status. Queries above
 `top_dim` return a zero Betti number and an empty spectrum.
 
+Construction takes a snapshot of the supplied simplex tree. Replacing boundaries
+with `set_boundaries_filtrations()` replaces the complex and clears its previous
+simplex mappings, labels, persistence state, and profile. Subsequent summaries
+use the new matrices; invalid replacement data leaves the original object intact.
+
+Gudhi homology uses coefficients in the field of integers modulo 11. Laplacian
+nullity is computed numerically over the reals; the two quantities are reported
+separately because their coefficient fields differ.
+
 Ordinary oversized localization can use the sparse path and limit automatic
 representatives with `max_features`. Persistent localization requires a dense
 Schur-complement calculation and observes the configured allocation guard.
@@ -84,7 +93,9 @@ Schur-complement calculation and observes the configured allocation guard.
 - `zero_atol` and `zero_rtol` define the scale-aware zero test
   `abs(λ) <= zero_atol + zero_rtol * max(abs(spectrum))`.
 - `max_matrix_rows` and `max_matrix_bytes` guard dense allocations before
-  construction.
+  construction. The byte limit includes rectangular boundary matrices and
+  bounds the largest individual dense construction matrix, including a possible
+  dense fallback; it is not a bound on total process memory or solver workspace.
 - `on_oversize` accepts `"raise"` or `"homology_only"` for oversized persistent
   requests.
 
@@ -100,6 +111,16 @@ guarded = petls_pytorch.Alpha(
 ```
 
 ## Solver selection
+
+`nonzero_spectra()` returns the complete positive spectrum, preserving
+multiplicity and using the same zero tolerance as the spectral summaries. It
+filters the full spectrum directly without constructing a dummy harmonic basis.
+A supplied `PH_basis` is checked for harmonicity and cannot remove positive modes.
+
+Scalar `spectra(dim, a, b)` calls return eigenvalues. Batch calls with
+`request_list`, or automatic calls without arguments, always return records
+`(dim, a, b, eigenvalues)`, including batches of zero or one request. These records
+can be passed directly to the spectrum export methods.
 
 Use `set_eigs_algorithm("eigvalsh")` for a complete dense spectrum or
 `set_eigs_algorithm("sparse", num_eigenvalues=...)` for a partial ordinary
