@@ -15,7 +15,7 @@ from petls_pytorch.variants.sheaf import sheaf_simplex_tree, PersistentSheafLapl
 from petls_pytorch.utils.plotting import summaries, plot_summary
 from petls_pytorch.utils.simplex_tree import simplex_tree_boundaries_filtrations
 
-__version__ = "1.1.2"
+__version__ = "1.2.0"
 
 
 __all__ = [

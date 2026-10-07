@@ -14,7 +14,6 @@ import numpy as np
 import torch
 
 from petls_pytorch.core.complex import Complex
-from petls_pytorch.utils.simplex_tree import simplex_tree_boundaries_filtrations
 
 
 def _read_off_file(path: str) -> list[list[float]]:
@@ -155,15 +154,8 @@ class Alpha(Complex):
         if simplex_tree.dimension() > max_dim:
             simplex_tree.prune_above_dimension(max_dim)
 
-        boundaries, filtrations, _ = simplex_tree_boundaries_filtrations(
-            simplex_tree,
-            sign_convention="cpp",
-            return_simplices=True,
-        )
-
         super().__init__(
-            boundaries=boundaries,
-            filtrations=filtrations,
+            boundary_sign_convention="cpp",
             simplex_tree=simplex_tree,
             device=device,
             dtype=dtype,

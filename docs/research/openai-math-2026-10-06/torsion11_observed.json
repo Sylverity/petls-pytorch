@@ -1,0 +1,115 @@
+{
+  "simplex_counts": [
+    38,
+    138,
+    101
+  ],
+  "euler_characteristic": 1,
+  "betti_F2": [
+    1,
+    0,
+    0
+  ],
+  "betti_F11": [
+    1,
+    1,
+    1
+  ],
+  "boundary_squared_max_abs": 0.0,
+  "real_H1_nullity_at_1e-9": 0,
+  "full_H1_first_5_eigenvalues": [
+    0.01725544720792108,
+    0.017539702983241444,
+    0.06734248140950827,
+    0.06847555249850497,
+    0.14571057236191265
+  ],
+  "library_F11_betti_H1": 1,
+  "partial_8": {
+    "betti": 1,
+    "spectral_nullity": null,
+    "least_nonzero_eigenvalue": 0.01725544723870505,
+    "spectrum_solver": "torch_range_partial",
+    "calculation_status": "partial_spectrum",
+    "requested_positive_modes": 8,
+    "working_block_size": 16,
+    "first_3_modes": [
+      {
+        "value": 0.01725544723870505,
+        "residual": 1.0484488733875906e-05,
+        "relative_residual": 0.0006076045777798527,
+        "quality": "approximate"
+      },
+      {
+        "value": 0.017539703049492268,
+        "residual": 1.5732834167501696e-05,
+        "relative_residual": 0.0008969840665550563,
+        "quality": "approximate"
+      },
+      {
+        "value": 0.06734248141028781,
+        "residual": 1.6230381808927047e-06,
+        "relative_residual": 2.4101252981817737e-05,
+        "quality": "approximate"
+      }
+    ]
+  },
+  "partial_24": {
+    "betti": 1,
+    "spectral_nullity": 0,
+    "least_nonzero_eigenvalue": null,
+    "spectrum_solver": "torch_small_complete",
+    "calculation_status": "spectral_nullity_mismatch",
+    "requested_positive_modes": 24,
+    "working_block_size": 138,
+    "first_3_modes": [
+      {
+        "value": 0.017539702983246728,
+        "residual": 6.228493280172108e-15,
+        "relative_residual": 3.5510825275213227e-13,
+        "quality": "unavailable"
+      },
+      {
+        "value": 0.06734248140951474,
+        "residual": 6.500094024803274e-15,
+        "relative_residual": 9.65229360242268e-14,
+        "quality": "unavailable"
+      },
+      {
+        "value": 0.06847555249850265,
+        "residual": 4.621840539695038e-15,
+        "relative_residual": 6.74962139195022e-14,
+        "quality": "unavailable"
+      }
+    ]
+  },
+  "partial_128": {
+    "betti": 1,
+    "spectral_nullity": 0,
+    "least_nonzero_eigenvalue": null,
+    "spectrum_solver": "torch_small_complete",
+    "calculation_status": "spectral_nullity_mismatch",
+    "requested_positive_modes": 128,
+    "working_block_size": 138,
+    "first_3_modes": [
+      {
+        "value": 0.017539702983246728,
+        "residual": 6.16285771298684e-15,
+        "relative_residual": 3.513661388036829e-13,
+        "quality": "unavailable"
+      },
+      {
+        "value": 0.06734248140951474,
+        "residual": 6.332264206366535e-15,
+        "relative_residual": 9.403075256255492e-14,
+        "quality": "unavailable"
+      },
+      {
+        "value": 0.06847555249850265,
+        "residual": 4.834370297287331e-15,
+        "relative_residual": 7.059994583312115e-14,
+        "quality": "unavailable"
+      }
+    ]
+  }
+}

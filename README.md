@@ -50,6 +50,9 @@ uv run --extra benchmark python -m benchmark --preset standard \
 Results include device and dtype metadata plus skipped and failed requests under
 `benchmark-results/`. See [technical notes](docs/technical-notes.md#benchmarks)
 for CPU, stress-test, reference-PETLS, and custom-workload commands.
+Use `--algorithm partial --dtype float64` to measure the new default low-mode
+path, including persistent filtration pairs and per-mode convergence records.
+The table above describes the earlier full-spectrum benchmark.
 
 ## Install
 
@@ -81,9 +84,13 @@ alpha = petls_pytorch.Alpha(
 )
 
 summary = alpha.topology_summary(dimensions=(0, 1), a=0.0, b=0.0)
-spectrum = alpha.spectra(dim=1, a=0.0, b=0.0)
+modes = alpha.positive_spectrum(dim=1, a=0.0, b=0.0, positive_modes=8)
+# Explicit full spectrum, when needed:
+# spectrum = alpha.spectra(dim=1, a=0.0, b=0.0)
 intervals = alpha.persistence_intervals(dim=1)
 features = alpha.harmonic_features(dim=1, a=0.0, b=0.0)
+participation = alpha.harmonic_participation(dim=1, a=0.0, b=0.0)
+# Basis-invariant simplex/point scores when participation_complete is True.
 ```
 
 The same analysis interface works across the supported constructions:
@@ -96,7 +103,8 @@ The same analysis interface works across the supported constructions:
 | Cellular sheaf | `PersistentSheafLaplacian` | Filtered complexes with restriction maps |
 
 Core methods include `get_L()`, `spectra()`, `eigenpairs()`,
-`persistence_intervals()`, `topology_summary()`, `harmonic_features()`, and
+`persistence_intervals()`, `positive_spectrum()`, `topology_summary()`,
+`harmonic_features()`, `harmonic_participation()`, and
 `estimate_laplacian()`.
 
 ## From a crystal to an interpretable signature
@@ -130,10 +138,31 @@ energetics calculation.
 - Gudhi persistence is the authoritative homology source for Gudhi-backed
   complexes, while numerical nullity and spectral diagnostics are reported
   separately.
-- Dense-allocation guards estimate matrix size before construction. Oversized
-  persistent requests can raise or return homology-only results.
-- Sparse solvers are available for partial ordinary spectra; persistent
-  Schur-complement calculations may still become dense.
+- Homology uses coefficients modulo 11; the Laplacian uses real coefficients.
+  Modular Betti counts never select or discard real positive modes. Results
+  expose both fields and report their agreement separately from solver quality.
+- `harmonic_participation()` localizes the harmonic space using projector-diagonal
+  scores, invariant to rotations of a complete harmonic basis. Scores also map
+  to points and their labels. Truncated results explicitly describe only the
+  computed subspace; check `participation_complete`.
+- Gudhi-backed `topology_summary()` now defaults to eight leading positive
+  modes. `positive_spectrum()` exposes the same partial solver directly.
+- Sparse operator applications, small projected eigensolves, and residual checks
+  stay on the selected device, in float64. Geometry and boundary indexing can
+  still use CPU. There is no implicit CPU eigensolver fallback.
+- Persistent queries apply an exact Schur correction without materializing the
+  full dense Laplacian. The smaller eliminated block is factored on the device;
+  singular blocks use a pseudoinverse. Allocation guards still apply.
+- Large partial solves work in `range(L)` with a block independent of Betti
+  multiplicity. They stop when the requested positive modes meet the configured
+  relative residual tolerance; they do not rediscover the harmonic kernel.
+- Each positive mode reports its residual and `certified`, `approximate`, or
+  `unavailable` quality. Range reconstruction and orthogonality are audited.
+  Numerical nullity is `None` for range solves; authoritative homology remains
+  available. Small complete solves still compare numerical nullity to homology.
+- `spectra()`, `eigenpairs()`, and `harmonic_features()` retain their explicit
+  complete-spectrum/localization behavior. Use `spectral_mode="full"` to request
+  the previous summary path; boundary-only complexes also retain that path.
 
 See [technical notes](docs/technical-notes.md) for filtration semantics, solver
 selection, localization behavior, allocation controls, the `.flag` format, and

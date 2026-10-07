@@ -143,7 +143,7 @@ def get_up(
       2. Compute L_up^b = B_pers @ B_pers^T.
       3. If no new rows between a and b: return L_up^b.
       4. Partition L_up^b into blocks [A B; C D] at row index a.
-      5. Solve D X = C for X via Cholesky (D is SPD).
+      5. Solve D X = C via Cholesky, or a pseudoinverse when D is singular.
       6. L_up = A - B @ X.
       7. Symmetrize from lower triangle.
 
@@ -199,8 +199,8 @@ def get_up(
     B_block = C.T
     D = L_up_b[a_rows:b_rows, a_rows:b_rows]
 
-    # D is SPD in theory but can be singular when some future rows have no
-    # incident columns. For Gram matrices those zero diagonal rows/columns
+    # D is positive semidefinite and may be singular, including when future rows
+    # have no incident columns. Those zero diagonal rows/columns
     # contribute nothing to the Schur complement, so trim them before solving.
     active = D.diagonal() > 0
     if not bool(torch.all(active)):
@@ -216,10 +216,11 @@ def get_up(
 
     # The original C++ uses LDLT which handles semidefinite matrices; fall back
     # to the pseudoinverse if the remaining active block is still singular.
-    try:
-        L_chol = torch.linalg.cholesky(D_solve)
+    L_chol, info = torch.linalg.cholesky_ex(D_solve)
+    pivot_floor = torch.finfo(D_solve.dtype).eps * D_solve.shape[0] * D_solve.diagonal().abs().max()
+    if int(info.item()) == 0 and bool((L_chol.diagonal().square() > pivot_floor).all()):
         X = torch.cholesky_solve(C_solve, L_chol)
-    except RuntimeError:
+    else:
         X = torch.linalg.pinv(D_solve, hermitian=True) @ C_solve
 
     L_up = A - B_solve @ X

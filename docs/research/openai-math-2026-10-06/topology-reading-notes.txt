@@ -1,0 +1,116 @@
+# Screening of families 200–377
+
+Source: OpenAI/math commit `adc7f1241b42e322a6451854ab7e4b4c146bf78a`. All 178 family catalogue descriptions screened, including every constituent paper abstract in the selected candidate families; actual PDF main statements and arguments inspected for 211 (spectral companion), 219 (clean random-regular GOE paper), 262 (matrix equality companion), 300 (quadratic strong-operator paving), 325 (direct Crouzeix), 332, 365 (metric+connection), 369 and 374. Other families screened at catalogue level, not independently proof-checked. No Lean compilation was performed. Formalization statements below describe the repository's declared scope, not independently verified correctness.
+
+## Ranked actionable/experimental connections
+
+### 1. Family 332: nonlinear smoothing of fixed-length topology descriptors (experimental)
+
+Paper: [Metric Markov Cotype Two of ℓ1](https://github.com/openai/math/blob/adc7f1241b42e322a6451854ab7e4b4c146bf78a/preprints/Metric-Markov-Cotype-Two-of-l1-October-5-2026/l1-markov-cotype.pdf).
+
+Theorem 1.2: for n vectors x_i in real ℓ1, a reversible stochastic matrix A with stationary probability π, and positive integer t, there exist y_i satisfying
+
+Σ_i π_i ||x_i-y_i||_1² + t Σ_ij π_i A_ij ||y_i-y_j||_1² ≤ 3024 Σ_ij π_i [(1/t)Σ_(s=1)^t A^s]_ij ||x_i-x_j||_1².
+
+Sections 5.1–5.3 give a concrete construction, not just an extension existence claim. Set p=1/(t+1), q=t/(t+1), G=p(I-qA)^(-1), sample three independent endpoints J_1,J_2,J_3 from row i of G, and let y_i=E[coordinatewise median(x_J1,x_J2,x_J3)]. Remark 5.1 says stationarity suffices for this construction/bound, because the proof only used πA=π; reversibility is a simple safe initial scope. Can approximate by endpoint Monte Carlo, but theorem applies to exact expectation; sampling adds its own error. The paper also constructs finite threshold cuts and a cubic smoothstep φ(u)=3u²−2u³.
+
+Potential petls experiment: for each trajectory frame, evaluate a fixed dimension descriptor on a shared filtration grid (heat traces or already normalized spectral summaries); build an undirected frame-neighbor graph and reversible random walk; compare this robust median diffusion against ordinary linear smoothing. Feature smoothing is external to exact topology. Do not replace integer Betti numbers with these fractional values while labeling them Betti numbers. Do not smooth raw harmonic basis columns, which have sign/rotation ambiguity; projector-derived simplex energies or other gauge-invariant summaries are candidates. The theorem says nothing about preserving births/deaths, realizability as a complex, or distinguishing transitions from noise. The huge universal constant is a theoretical guarantee, not practical tuning guidance.
+
+The Lipschitz extension corollary 6.2 additionally requires a Lipschitz map from a subset of a real Hilbert space into ℓ1, and gives existence of a dimension-independent extension. It does not prove existing barcode/Betti/eigenvector outputs are Lipschitz in point coordinates, nor give an immediate fast surrogate.
+
+Verification: no Lean family link; lean/docs/332.md returns 404; no matching main manuscript in formalization.yaml. Highest novelty-to-implementation potential in this range, but research-only until the proof and experiment are independently assessed.
+
+### 2. Family 219: calibrated spectral null-model diagnostics (direct on a narrow graph class)
+
+Paper: [GOE bulk universality for fixed-degree random regular graphs](https://github.com/openai/math/blob/adc7f1241b42e322a6451854ab7e4b4c146bf78a/preprints/GOE-bulk-universality-for-fixed-degree-random-regular-graphs-September-23-2026/paper.pdf).
+
+Theorem 1.1 concerns uniform simple labelled d-regular graphs, fixed d≥3, n→∞ through admissible sizes, at one fixed energy strictly inside the Kesten–McKay bulk. It identifies the unfolded adjacency eigenvalue point process with GOE. Density is ρ_d(E)=d sqrt(4(d−1)−E²)/(2π(d²−E²)); unfolding uses nρ_d(E)(λ_i−E). For the ordinary 0-Laplacian L0=dI−A the relation is exact, so existing q=0 eigenvalues suffice. Scope is a static unweighted graph, not a positive persistence-pair correction or higher-dimensional Hodge spectrum.
+
+Potential: optional benchmark/notebook or graph structural diagnostic comparing bulk spacing distributions and localization summaries against random-regular null ensembles. Use multiple n and seeds, exact degree checks, remove trivial eigenvalue and stay away from edges. No universal finite-n error threshold is supplied. This does not establish GOE statistics for molecular graphs, random geometric/Rips graphs, persistent Schur complements, or arbitrary sparse PSD matrices. The disorder companion permits sufficiently weak fixed iid uniform diagonal disorder in specified interior bands; that does not make a geometric complex independent-entry.
+
+Verification: no Lean family link or lean/docs/219.md, and clean paper absent from formalization catalogue. Novel theorem would justify a null model only; computational implementation does not require the theorem and should not be advertised as proof validation.
+
+### 3. Family 365: boundary-response signatures (inspiration, not theorem transfer)
+
+Paper: [Determination of a metric and a unitary connection from one boundary patch](https://github.com/openai/math/blob/adc7f1241b42e322a6451854ab7e4b4c146bf78a/preprints/Determination-of-a-metric-and-a-unitary-connection-from-one-boundary-patch-October-5-2026/paper.pdf).
+
+Theorem 1.1: compact connected smooth manifold dimension ≥3, nonempty smooth boundary and nonempty relatively open measured patch Γ, smooth metric, smooth U(2) connection on a trivial complex rank-two bundle. Equality of all zero-frequency input-output boundary energy pairings determines metric and connection up to a diffeomorphism and gauge equal to identity on Γ. This is infinite continuum boundary information, not eigenvalues, finite sampling, or a generic discrete sheaf.
+
+Potential focused feature: boundary/effective-response matrices on selected vertices or simplices, exploiting the same Schur elimination algebra already underlying persistent Laplacians. For a finite PSD L partitioned into observed B and interior I, use S=L_BB−L_BI L_II^† L_IB with appropriate kernel/compatibility treatment (ordinary inverse when L_II SPD). For graph Laplacians this is classical Kron reduction, and for general PSD matrices a generalized Schur complement. It is NOT a new algorithm from this preprint. Test variational energy and PSD properties, compare response matrices across filtration scales, and study relation to localized cycles. Discrete identifiability can fail; the continuum theorem supplies no uniqueness guarantee for graph or sheaf reconstruction.
+
+Important formalization mismatch: [lean/docs/365.md](https://github.com/openai/math/blob/adc7f1241b42e322a6451854ab7e4b4c146bf78a/lean/docs/365.md) covers the separate *nonuniqueness* result for bounded measurable scalar conductivities, not smooth metric/connection uniqueness. Never label the new uniqueness companion Lean-verified.
+
+### 4. Family 374: optional point-cloud transport-coordinate representation (lower priority)
+
+Paper: [Sharp One-Third Stability of Brenier Maps](https://github.com/openai/math/blob/adc7f1241b42e322a6451854ab7e4b4c146bf78a/preprints/Sharp-One-Third-Stability-of-Brenier-Maps-September-25-2026/article.pdf).
+
+Theorem 1.1: fixed uniform source ρ on compact convex K⊂R^d with nonempty interior, d≥2; all target probabilities μ,ν supported in one fixed compact Y. Unique quadratic optimal maps satisfy ||T_μ−T_ν||_L2(ρ) ≤ C(K,Y) W2(μ,ν)^(1/3), sharp even for three-atom targets on a fixed cube. Targets may be atomic; source may not be an empirical cloud. Constant independent of target atom count/mass/separation, but geometry dependent.
+
+Possible future fixed-reference representation of molecular conformations/point clouds before comparing topology descriptors, using semi-discrete optimal transport; main practical insight is a bound on instability and the failure of an unjustified uniform square-root claim. It is not a barcode Wasserstein stability theorem, does not apply to arbitrary discrete-to-discrete matching, and L2 source-average control gives no automatic Hausdorff or bottleneck stability of Rips filtrations or harmonic representatives. Substantial OT machinery and a new bridge theorem would be needed. Do not make this a core feature merely because targets are atomic.
+
+Declared Lean scope explicitly includes 1/3 stability and exponent sharpness: [lean/docs/374.md](https://github.com/openai/math/blob/adc7f1241b42e322a6451854ab7e4b4c146bf78a/lean/docs/374.md). No build done.
+
+## Strong-looking false positives / exclusions
+
+### 325, Crouzeix: no gain for current self-adjoint PSD operators
+
+[Direct paper](https://github.com/openai/math/blob/adc7f1241b42e322a6451854ab7e4b4c146bf78a/preprints/A-direct-proof-of-the-complete-Crouzeix-inequality-September-26-2026/paper.pdf), Theorem 1.1 gives ||P[A]|| ≤ 2 max_(z∈W(A))||P(z)|| for arbitrary finite complex A and matrix-valued polynomials, sharp. Current symmetric L already has ||P[L]||=max_(λ∈spec L)||P(λ)|| and thus interval bound constant ONE. Chebyshev/Lanczos heat filters can therefore be certified using established spectral theorem facts, without this new result. Only consider Crouzeix if a future explicitly nonnormal directed transport/sheaf operator is introduced. A normalized random-walk Laplacian may be nonsymmetric in Euclidean coordinates but self-adjoint in degree weights, so symmetrizing it can still eliminate the need. Declared [Lean scope](https://github.com/openai/math/blob/adc7f1241b42e322a6451854ab7e4b4c146bf78a/lean/docs/325.md) includes complete finite/infinite inequality, sharpness, and structural supporting results.
+
+### 262, finite-matrix Lieb–Thirring: matrix-valued continuum potential, not finite graph Laplacian
+
+[Equality manuscript](https://github.com/openai/math/blob/adc7f1241b42e322a6451854ab7e4b4c146bf78a/preprints/Equality-cases-in-the-sharp-one-dimensional-matrix-Lieb-Thirring-inequality-October-5-2026/sharp-one-dimensional-lieb-thirring-inequalities-matrix-potentials.pdf), Theorem 1.1: H_W=−d²/dx²−W(x) on L²(R;C^m), W measurable Hermitian PSD, ∫tr W^(γ+1/2)<∞, 1/2<γ<3/2. Bounds negative eigenvalue moments and classifies equality as fixed-unitary sums of independent sech² one-bound-state wells. Finite refers to channel count m; the operator is continuous on the whole real line. Petls Laplacians are PSD, so have no negative binding spectrum. Could use solitons as a specialized continuum discretization fixture if adding Schrödinger potentials, but boundary truncation/discretization errors require analysis and this would drift from present core. Existing generic eigensolver residual/orthogonality/known finite graph benchmarks are more direct. [Lean scope](https://github.com/openai/math/blob/adc7f1241b42e322a6451854ab7e4b4c146bf78a/lean/docs/262.md) covers only scalar sharp inequality, NOT matrix extension or equality classification.
+
+### 211, random surface spectral limits: mass/normalization lesson, no general convergence theorem
+
+[90-page spectral companion](https://github.com/openai/math/blob/adc7f1241b42e322a6451854ab7e4b4c146bf78a/preprints/Spectral-convergence-for-critical-FK-Ising-planar-maps-October-5-2026/spectral-convergence-critical-fk-ising-planar-maps.pdf), Theorem 1.1 treats critical spherical FK-Ising multigraph maps (loops and multiplicities), total attempt rate one, stationary corner/degree measure μ_n(v)=deg(v)/(2n), accelerated time n (edge count). Joint metric-measure, ordered spectral, and heat-trace limits go to √3 Liouville quantum sphere. Heat convergence locally uniform only for positive times. Declared Brownian/LQG companion inputs remain assumptions in the chain of results. This ensemble and exact mass/clock convention do not hold for petls Rips/alpha combinatorial Laplacians. It motivates exposing operator normalization/mass measure if continuum-consistent modes are ever added, and heat traces are a useful established aggregation, but proves neither consistency nor stability of existing operators. [Lean scope](https://github.com/openai/math/blob/adc7f1241b42e322a6451854ab7e4b4c146bf78a/lean/docs/211.md) covers q>4 CRT metric-measure limit ONLY; it does not cover q=2 spectral companion.
+
+### 300, paving: not an eigensolver acceleration theorem
+
+Quadratic strong-operator paving, Theorem 1.1, gives ≤5×10^8 ε^-2 projections for arbitrary MASAs of von Neumann algebras, with a near-identity strong-topology compression and a diagonal correction. The theorem controls a pinching Σp_i x p_i after correction/compression; it does not assert that discarding off-block entries approximates x, preserves its spectrum or kernel, or produces a practical partition. Finite-dimensional paving input is older work explicitly cited. No practical CUDA/CPU eigensolver change follows. No declared Lean scope.
+
+### 369, hot spots: continuum Neumann positive modes are not harmonic cycles
+
+Smooth bounded simply connected planar domains, first positive scalar Neumann eigenfunctions; theorem asserts nonvanishing interior gradient and boundary extrema. Petls harmonic representatives are zero-eigenvalue higher-cochain objects on arbitrary finite complexes. No transfer without correct boundary conditions, discretization, and continuum spectral/eigenfunction convergence; most graph datasets lack planar domain geometry. Declared Lean matches continuum theorem, not graph analogue.
+
+### Other catalogue-level exclusions
+
+200 graded Betti numbers concern free resolutions of polynomial ideals, not simplicial Betti curves. 239 random symmetric sign-matrix singularity concerns independent random entries, whereas chain-complex identities force structured dependencies/zero modes. 261 Anderson localization concerns infinite lattice Schrödinger operators and pure-point/absolutely-continuous spectral types, not finite harmonic support maps. 265 tensor-network area laws require local many-body tensor-product Hamiltonians and unique uniformly gapped ground states; a general simplicial matrix is not such a Hamiltonian. 289 Kadison–Kastler stability concerns closeness of operator algebra unit balls, not perturbation of one finite symmetric matrix; use existing Davis–Kahan-type tools. 304–321 geometric/group/chromatic topology is largely about manifolds, classifying spaces, spectra in stable homotopy, or group L² invariants, not ordinary finite persistent homology. 310 Quillen rational homology can inspire an exotic finite order-complex benchmark but no new general algorithm. 315 Singer controls L² Betti numbers of infinite universal covers of closed aspherical four-dimensional Poincaré objects, not arbitrary finite complexes. 350 nodal-measure bounds apply to smooth continuum positive eigenfunctions, not finite harmonic cycles. 361 polynomial-growth harmonic function dimension on complete Ricci-nonnegative manifolds is distinct from finite cochain Hodge nullity. 364 molecular kinetic limits are derivations from special thermodynamic/regularity assumptions, not topology of finite molecular trajectories. 377 infinity-harmonic regularity is a nonlinear PDE with nonexplicit exponent and no finite simplicial Hodge benefit.
+
+## Recommendation
+
+For this screened range, there is no justified drop-in replacement for persistent-Laplacian mathematics or faster eigensolver. Worth retaining: one constrained graph spectral null-model experiment (219), one experimental descriptor smoother (332), and boundary-response feature inspiration (365) grounded in already-known Schur/Kron mathematics. 374 is a lower-priority watch item. Do not imply that any of these creates a proved topology-preserving approximation, arbitrary graph identifiability, or GPU speedup.
+
+## Additional close reading: family 337, integral fillings
+
+[Sharp integral fillings in CAT(0) spaces](https://github.com/openai/math/blob/adc7f1241b42e322a6451854ab7e4b4c146bf78a/preprints/Sharp-integral-fillings-in-CAT%280%29-spaces-September-23-2026/paper.pdf), 46 pages; inspected Theorem 1.1, §§1.2–1.3 (scope/proof outline), compact reduction/background in §2, and relevant construction/optimality claims. This is theorem-and-selected-sections review, not certification of all 46 pages.
+
+Theorem 1.1: every compactly supported integral n-current T with ∂T=0, n≥2, in a proper CAT(0) metric space X admits compactly supported integral S with ∂S=T and
+
+M(S) ≤ M(T)^((n+1)/n) / ((n+1)^((n+1)/n) ω_(n+1)^(1/n)).
+
+For n=2, the constant is 1/(6√π). Arbitrary integer multiplicities and ambient dimensions are allowed. The proof uses compactness, attainment, variational extremizers and curvature comparison; it supplies no efficient finite matrix/combinatorial filling algorithm. Paper explicitly says it does not prescribe topology or parametrization of fillings. It generalizes a Euclidean sharp-current bound already known from Almgren to proper CAT(0) spaces, rather than discovering the familiar Euclidean bound anew.
+
+Possible distant feature: add geometric area/mass and optional filling-volume diagnostics for localized q≥2 cycles. But a petls harmonic vector has arbitrary real coefficients and Euclidean ℓ2 normalization; it is not automatically an integer-multiplicity integral current. To use theorem require an integral cycle representative, a geometric realization (with appropriate mass and possible overlap cancellation), and certified proper CAT(0) ambient metric. Euclidean ambient R^d qualifies; a periodic simulation torus with its intrinsic metric does not. Abstract Rips complexes, curved sampled manifolds, and molecule-distance graphs are not automatically CAT(0).
+
+Most decisive obstacle: the filling guaranteed in ambient X need not lie in the current filtered simplicial complex or use its available simplices. A persistent nonbounding cycle can bound in ambient Euclidean space from the outset; ambient fillability thus does not determine barcode death or Betti nullity. Conversely, failure of an available finite filling to meet the continuous bound need not contradict the theorem. Extension to real harmonic chains would require a separate argument, not rounding coefficients (which can destroy ∂T=0).
+
+Recommendation: keep as research inspiration for a geometry-aware localization diagnostic, below 219/332/365; do not use it to alter persistence reduction or declare existing harmonic classes fillable at any filtration value. [Declared Lean scope](https://github.com/openai/math/blob/adc7f1241b42e322a6451854ab7e4b4c146bf78a/lean/docs/337.md) specifically covers this integral-current theorem plus sharpness (SharpCAT0Filling and FillingCoefficient comparators), not the separate generalized negative-curvature rigidity paper. No Lean compilation run.
+
+## Exact manuscript inspection inventory
+
+Ten PDFs were opened and inspected at the level of main theorem, hypotheses, introduction and selected argument sections; none was independently proof-certified:
+
+| Family | Manuscript | PDF pages |
+|---|---|---:|
+| 211 | Spectral convergence for critical FK–Ising planar maps | 90 |
+| 219 | GOE bulk universality for fixed-degree random regular graphs | 44 |
+| 262 | Equality cases in the sharp one-dimensional matrix Lieb–Thirring inequality | 28 |
+| 300 | Quadratic Strong-Operator Paving over Arbitrary Maximal Abelian Subalgebras | 54 |
+| 325 | A direct proof of the complete Crouzeix inequality | 12 |
+| 332 | Metric Markov Cotype Two of ℓ1 | 9 |
+| 337 | Sharp integral fillings in CAT(0) spaces | 46 |
+| 365 | Determination of a metric and a unitary connection from one boundary patch | 50 |
+| 369 | Strict hot spots and absence of interior critical points on smooth simply connected planar domains | 21 |
+| 374 | Sharp One-Third Stability of Brenier Maps | 18 |
+
+Machine-readable screen: `/tmp/petls-math-review/topology-screening.csv` and `.json`, exactly 178 families 200–377. Classification records include review depth and exclusions. The supplementary abstracts of same-family companion papers were screened; those companions should not be counted as additional inspected PDFs.

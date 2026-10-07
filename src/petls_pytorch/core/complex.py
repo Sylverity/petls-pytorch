@@ -71,6 +71,7 @@ class Complex:
         max_matrix_rows: int | None = 12_000,
         max_matrix_bytes: int | None = 4_000_000_000,
         on_oversize: str = "raise",
+        boundary_sign_convention: str = "python",
     ):
         self.device = resolve_device(device)
         self.dtype = resolve_dtype(dtype)
@@ -121,6 +122,7 @@ class Complex:
             simplex_tree = simplex_tree.copy()
             extracted = simplex_tree_boundaries_filtrations(
                 simplex_tree,
+                sign_convention=boundary_sign_convention,
                 return_simplices=True,
             )
             extracted_boundaries, extracted_filtrations, simplices = extracted
@@ -421,7 +423,7 @@ class Complex:
         candidate_solver_is_reliable: bool,
         **extra: Any,
     ) -> dict[str, Any]:
-        """Audit a partial lowest spectrum against homology and residuals."""
+        """Audit real eigenpairs; modular Betti counts are a separate diagnostic."""
         if values.size:
             residuals = np.linalg.norm(laplacian @ vectors - vectors * values, axis=0)
             row_sums = np.asarray(np.abs(laplacian).sum(axis=1)).ravel()
@@ -446,17 +448,28 @@ class Complex:
         orthogonality_limit = max(1e-8, 10.0 * np.sqrt(epsilon))
         residuals_pass = bool(max_normalized_residual <= residual_limit)
         orthogonality_pass = bool(orthogonality_error <= orthogonality_limit)
-        has_gap_candidate = known_betti is not None and known_betti < len(values)
+        has_gap_candidate = bool(np.any(values > tolerance))
+        full_nullity = extra.get("full_spectral_nullity")
+        kernel_complete = bool(
+            residuals_pass
+            and orthogonality_pass
+            and (
+                numerical_nullity == full_nullity
+                if full_nullity is not None
+                else candidate_solver_is_reliable and has_gap_candidate
+            )
+        )
         lowest_spectrum_certified = bool(
             candidate_solver_is_reliable
-            and nullity_matches
+            and kernel_complete
             and has_gap_candidate
             and residuals_pass
             and orthogonality_pass
         )
         return {
             "solver": solver,
-            "authoritative_nullity": known_betti,
+            "homology_betti": known_betti,
+            "homology_coeff_field": 11 if known_betti is not None else None,
             "numerical_nullity": numerical_nullity,
             "nullity_matches": nullity_matches if known_betti is not None else None,
             "max_normalized_residual": max_normalized_residual,
@@ -466,6 +479,7 @@ class Complex:
             "residuals_pass": residuals_pass,
             "orthogonality_pass": orthogonality_pass,
             "lowest_spectrum_certified": lowest_spectrum_certified,
+            "kernel_complete": kernel_complete,
             **extra,
         }
 
@@ -477,8 +491,9 @@ class Complex:
     ) -> _SparseEigenpairsResult | None:
         """Recover a repeated Hodge kernel with block LOBPCG.
 
-        The block width includes the authoritative nullity and several positive
-        candidates.  A shifted positive-definite inverse is used only as a
+        The modular Betti count is an upper bound on ordinary real nullity and
+        is used only to size the search block, not to identify zero modes.
+        A shifted positive-definite inverse is used only as a
         preconditioner, so the eigenproblem remains the original Laplacian.
         """
         import scipy.sparse
@@ -604,6 +619,7 @@ class Complex:
                 self._gudhi_betti_at(dim, scale),
                 solver="empty",
                 candidate_solver_is_reliable=True,
+                full_spectral_nullity=0,
             )
             return _SparseEigenpairsResult(empty_values, empty_vectors, diagnostics)
 
@@ -614,7 +630,7 @@ class Complex:
         if which not in EIGENVALUE_ORDERS:
             raise ValueError("eigenvalue_order must be one of 'SM', 'SA', 'LM', 'LA', or 'BE'")
         known_betti = self._gudhi_betti_at(dim, scale)
-        # A few eigenvalues beyond a known nullity usually expose the gap. Do
+        # Ordinary modular Betti counts bound real nullity from above. Do
         # not let a very large Betti number silently turn a lowest-spectrum
         # query into an almost-complete eigendecomposition.
         if (
@@ -634,6 +650,7 @@ class Complex:
         extra_diagnostics: dict[str, Any] = {}
         if laplacian.nnz == 0:
             values = np.zeros(rows, dtype=np.float64)
+            extra_diagnostics["full_spectral_nullity"] = rows
             selected = eigenvalue_indices(values, requested, which)
             vectors = np.zeros((rows, len(selected)), dtype=np.float64)
             vectors[selected, np.arange(len(selected))] = 1.0
@@ -641,6 +658,9 @@ class Complex:
         elif np.count_nonzero(laplacian.diagonal()) == laplacian.nnz:
             solver = "exact_diagonal"
             values = np.asarray(laplacian.diagonal(), dtype=np.float64)
+            extra_diagnostics["full_spectral_nullity"] = int(
+                np.count_nonzero(np.abs(values) <= self._zero_tolerance(values))
+            )
             selected = eigenvalue_indices(values, requested, which)
             vectors = np.zeros((rows, len(selected)), dtype=np.float64)
             vectors[selected, np.arange(len(selected))] = 1.0
@@ -655,6 +675,9 @@ class Complex:
             solver = "dense_complete"
             dense = laplacian.toarray()
             values, vectors = np.linalg.eigh(dense)
+            extra_diagnostics["full_spectral_nullity"] = int(
+                np.count_nonzero(np.abs(values) <= self._zero_tolerance(values))
+            )
         else:
             requested = min(requested, rows - 1)
             block_result = None
@@ -1088,7 +1111,10 @@ class Complex:
         return np.asarray(intervals, dtype=np.float64).copy()
 
     def persistent_betti(self, dim: int, birth_scale: float, death_scale: float) -> int:
-        """Return the rank of the homology map from ``birth_scale`` to ``death_scale``."""
+        """Return the F_11 homology-map rank from birth to death scale.
+
+        This can differ from the nullity of the real persistent Laplacian.
+        """
         if death_scale < birth_scale:
             raise ValueError("death_scale must be greater than or equal to birth_scale")
         intervals = self.persistence_intervals(dim)
@@ -1105,7 +1131,118 @@ class Complex:
             return None
         return self.persistent_betti(dim, scale, scale)
 
+    def positive_spectrum(
+        self, dim, a, b=None, *, positive_modes=8, max_iterations=1000, relative_tolerance=1e-3
+    ):
+        """Leading positive modes on this device, with per-mode residual quality.
+
+        Homology is independent. Sparse work and the small persistent Schur
+        block replace the full dense Laplacian. No CPU eigensolver fallback.
+        """
+        from petls_pytorch.core.low_modes import positive_modes as solve
+
+        return solve(
+            self, dim, a, a if b is None else b, positive_modes, max_iterations, relative_tolerance
+        )
+
     def topology_summary(
+        self,
+        dimensions=None,
+        a=0.0,
+        b=0.0,
+        on_oversize=None,
+        smallest_eigenvalues=10,
+        *,
+        spectral_mode="partial",
+        positive_modes=8,
+        max_iterations=1000,
+        relative_tolerance=1e-3,
+    ):
+        """Homology and leading positive spectra (partial by default).
+
+        ``spectral_mode="full"`` retains the explicit full/legacy solver route.
+        Raw boundary-only complexes without homology also need that route.
+        Per-mode quality is retained independently of the rest of the block.
+        """
+        if spectral_mode not in {"partial", "full"}:
+            raise ValueError("spectral_mode must be 'partial' or 'full'")
+        if spectral_mode == "full" or self.simplex_tree is None:
+            return self._full_topology_summary(dimensions, a, b, on_oversize, smallest_eigenvalues)
+        if b < a or smallest_eigenvalues < 0:
+            raise ValueError("Require b >= a and smallest_eigenvalues >= 0")
+        policy = self.on_oversize if on_oversize is None else on_oversize
+        if policy not in {"raise", "homology_only"}:
+            raise ValueError("on_oversize must be 'raise' or 'homology_only'")
+        dimensions = range(self.top_dim + 1) if dimensions is None else dimensions
+        output = {
+            "filtration_a": float(a),
+            "filtration_b": float(b),
+            "betti_kind": "ordinary" if a == b else "persistent",
+            "method": "gudhi_homology_with_device_partial_spectrum",
+            "homology_coeff_field": 11,
+            "spectral_coeff_field": "real",
+            "zero_atol": self.zero_atol,
+            "zero_rtol": self.zero_rtol,
+        }
+        fields = (
+            "betti",
+            "spectral_nullity",
+            "homology_spectral_agreement",
+            "least_nonzero_eigenvalue",
+            "positive_modes",
+            "smallest_eigenvalues",
+            "zero_tolerance",
+            "matrix_rows",
+            "spectrum_solver",
+            "spectrum_device",
+            "spectrum_certified",
+            "spectrum_max_normalized_residual",
+            "calculation_status",
+            "iterations",
+            "construction_s",
+            "solve_s",
+            "schur_rows",
+            "requested_positive_modes",
+            "working_block_size",
+            "nullspace_handling",
+            "range_reconstruction_error",
+        )
+        output.update({key: {} for key in (*fields, "betti_source", "estimates")})
+        for raw_dim in dimensions:
+            dim = int(raw_dim)
+            if dim < 0:
+                raise ValueError("dimensions must be non-negative")
+            try:
+                result = self.positive_spectrum(
+                    dim,
+                    a,
+                    b,
+                    positive_modes=positive_modes,
+                    max_iterations=max_iterations,
+                    relative_tolerance=relative_tolerance,
+                )
+            except LaplacianSizeError:
+                if policy == "raise":
+                    raise
+                result = {key: None for key in fields}
+                result.update(
+                    betti=self.persistent_betti(dim, a, b),
+                    calculation_status="homology_only_oversize",
+                    positive_modes=[],
+                    smallest_eigenvalues=[],
+                    matrix_rows=self._laplacian_rows(dim, a),
+                    spectrum_device=str(self.device),
+                )
+            for key in fields:
+                value = result[key]
+                output[key][dim] = (
+                    value[:smallest_eigenvalues] if key == "smallest_eigenvalues" else value
+                )
+            output["betti_source"][dim] = "gudhi_persistence"
+            output["estimates"][dim] = self.estimate_laplacian(dim, a, b)
+        return output
+
+    def _full_topology_summary(
         self,
         dimensions: Sequence[int] | None = None,
         a: float = 0.0,
@@ -1131,6 +1268,7 @@ class Complex:
 
         betti: dict[int, int] = {}
         spectral_nullity: dict[int, int | None] = {}
+        homology_spectral_agreement: dict[int, bool | None] = {}
         least_nonzero: dict[int, float | None] = {}
         matrix_rows: dict[int, int] = {}
         tolerances: dict[int, float | None] = {}
@@ -1147,6 +1285,7 @@ class Complex:
             if dim < 0:
                 raise ValueError("dimensions must contain non-negative integers")
             estimate = self.estimate_laplacian(dim, a, b)
+            homology_spectral_agreement[dim] = None
             estimates[dim] = estimate
             matrix_rows[dim] = estimate["rows"]
 
@@ -1222,27 +1361,29 @@ class Complex:
                 if only_known_null_modes:
                     least_nonzero[dim] = None
                     statuses[dim] = "sparse_null_modes_only"
-                elif authoritative is not None and nullity != authoritative:
-                    least_nonzero[dim] = None
-                    statuses[dim] = "spectral_nullity_mismatch"
                 elif (
-                    authoritative is not None
-                    and sparse_diagnostics is not None
+                    sparse_diagnostics is not None
                     and not sparse_diagnostics["lowest_spectrum_certified"]
                 ):
                     least_nonzero[dim] = None
-                    statuses[dim] = "sparse_spectrum_unverified"
+                    statuses[dim] = (
+                        "spectral_nullity_mismatch"
+                        if authoritative is not None and nullity != authoritative
+                        else "sparse_spectrum_unverified"
+                    )
                 else:
                     least_nonzero[dim] = least
+                if authoritative is not None and sparse_diagnostics is not None:
+                    full_nullity = sparse_diagnostics.get("full_spectral_nullity")
+                    if full_nullity is not None:
+                        homology_spectral_agreement[dim] = full_nullity == authoritative
+                    elif sparse_diagnostics["kernel_complete"]:
+                        homology_spectral_agreement[dim] = nullity == authoritative
             else:
-                if authoritative is not None and nullity != authoritative:
-                    least_nonzero[dim] = None
-                    statuses[dim] = "spectral_nullity_mismatch"
-                    spectrum_certified[dim] = False
-                else:
-                    least_nonzero[dim] = least
-                    if authoritative is not None:
-                        spectrum_certified[dim] = True
+                least_nonzero[dim] = least
+                if authoritative is not None:
+                    homology_spectral_agreement[dim] = nullity == authoritative
+                    spectrum_certified[dim] = True
             tolerances[dim] = tolerance
             smallest[dim] = np.sort(values)[:smallest_eigenvalues].tolist()
             if authoritative is None:
@@ -1255,6 +1396,9 @@ class Complex:
             "betti_kind": "ordinary" if a == b else "persistent",
             "betti": betti,
             "betti_source": betti_source,
+            "homology_coeff_field": 11 if self.simplex_tree is not None else None,
+            "spectral_coeff_field": "real",
+            "homology_spectral_agreement": homology_spectral_agreement,
             "spectral_nullity": spectral_nullity,
             "least_nonzero_eigenvalue": least_nonzero,
             "matrix_rows": matrix_rows,
@@ -1270,15 +1414,14 @@ class Complex:
             "method": "gudhi_homology_with_persistent_laplacian_spectrum",
         }
 
-    def harmonic_features(
+    def _harmonic_basis(
         self,
         dim: int,
         a: float,
         b: float | None = None,
-        coefficient_atol: float = 0.0,
         max_features: int | None = None,
-    ) -> dict[str, Any]:
-        """Return numerical harmonic representatives mapped to simplices."""
+    ) -> tuple[dict[str, Any], np.ndarray, np.ndarray]:
+        """Recover the real harmonic subspace, independently of modular homology."""
         b = a if b is None else b
         if not self.simplices_by_dimension:
             raise RuntimeError("Simplex mappings require construction from a Gudhi SimplexTree")
@@ -1286,10 +1429,12 @@ class Complex:
             raise ValueError(f"dim must be between 0 and {len(self.simplices_by_dimension) - 1}")
         if dim > self.top_dim:
             raise ValueError(f"dim must be between 0 and {self.top_dim}")
-        if coefficient_atol < 0:
-            raise ValueError("coefficient_atol must be non-negative")
-        if max_features is not None and max_features < 1:
-            raise ValueError("max_features must be positive or None")
+        if b < a:
+            raise ValueError("b must be greater than or equal to a")
+        if max_features is not None and (
+            not isinstance(max_features, int) or isinstance(max_features, bool) or max_features < 1
+        ):
+            raise ValueError("max_features must be a positive integer or None")
 
         authoritative = self.persistent_betti(dim, a, b) if self.simplex_tree is not None else None
         estimate = self.estimate_laplacian(dim, a, b)
@@ -1300,14 +1445,9 @@ class Complex:
                 "localization has a sparse oversized path only for ordinary a == b "
                 "calculations."
             )
-        feature_target = authoritative
-        calculation_status = "complete"
-        if authoritative is not None and max_features is not None:
-            feature_target = min(authoritative, max_features)
-        elif authoritative is not None and not estimate["within_dense_limits"]:
-            feature_target = min(authoritative, 10)
-            if feature_target < authoritative:
-                calculation_status = "truncated_for_scale"
+        feature_target = max_features
+        if feature_target is None and not estimate["within_dense_limits"]:
+            feature_target = 10
         if a == b and (not estimate["within_dense_limits"] or self._eigs_algorithm == "sparse"):
             recovery_target = feature_target or 0
             if authoritative is not None and authoritative < _SPARSE_BLOCK_MAX_EIGENVALUES:
@@ -1334,26 +1474,71 @@ class Complex:
         tolerance = self._zero_tolerance(values_np)
         harmonic_indices = np.flatnonzero(np.abs(values_np) <= tolerance)
         numerical_nullity = len(harmonic_indices)
-        if (
-            authoritative is not None
-            and numerical_nullity != authoritative
-            and not (
-                calculation_status == "truncated_for_scale" and numerical_nullity == len(values_np)
-            )
-        ):
-            calculation_status = "spectral_nullity_mismatch"
-        elif (
-            sparse_result is not None
-            and authoritative is not None
-            and numerical_nullity == authoritative
-            and not (
-                sparse_result.diagnostics["residuals_pass"]
-                and sparse_result.diagnostics["orthogonality_pass"]
-            )
-        ):
-            calculation_status = "sparse_spectrum_unverified"
+        kernel_complete = sparse_result is None or sparse_result.diagnostics["kernel_complete"]
+        full_nullity = (
+            numerical_nullity
+            if kernel_complete
+            else sparse_result.diagnostics.get("full_spectral_nullity")
+            if sparse_result is not None
+            else None
+        )
         if feature_target is not None:
             harmonic_indices = harmonic_indices[:feature_target]
+        complete = bool(kernel_complete and len(harmonic_indices) == numerical_nullity)
+        calculation_status = "complete"
+        if not complete:
+            calculation_status = (
+                "truncated_for_scale"
+                if not estimate["within_dense_limits"]
+                else "truncated"
+                if len(harmonic_indices) < numerical_nullity
+                else "partial_harmonic_space"
+            )
+        if sparse_result is not None and not (
+            sparse_result.diagnostics["residuals_pass"]
+            and sparse_result.diagnostics["orthogonality_pass"]
+        ):
+            calculation_status = "sparse_spectrum_unverified"
+        metadata = {
+            "dimension": dim,
+            "filtration_a": float(a),
+            "filtration_b": float(b),
+            "betti": authoritative,
+            "homology_coeff_field": 11 if authoritative is not None else None,
+            "spectral_coeff_field": "real",
+            "homology_spectral_agreement": (
+                full_nullity == authoritative
+                if full_nullity is not None and authoritative is not None
+                else None
+            ),
+            "spectral_nullity": full_nullity,
+            "recovered_nullity": numerical_nullity,
+            "returned_features": len(harmonic_indices),
+            "features_complete": complete,
+            "calculation_status": calculation_status,
+            "zero_tolerance": tolerance,
+        }
+        return metadata, values_np[harmonic_indices], vectors_np[:, harmonic_indices]
+
+    def harmonic_features(
+        self,
+        dim: int,
+        a: float,
+        b: float | None = None,
+        coefficient_atol: float = 0.0,
+        max_features: int | None = None,
+    ) -> dict[str, Any]:
+        """Return a numerical real harmonic basis mapped to simplices.
+
+        Individual vectors are not canonical when the kernel is multidimensional.
+        Use :meth:`harmonic_participation` for basis-invariant localization.
+        ``features_complete`` describes recovery of the real numerical kernel,
+        independently of the F_11 Betti count. Coefficient filtering affects only
+        the displayed vectors, not the recovered subspace or its completeness.
+        """
+        if not np.isfinite(coefficient_atol) or coefficient_atol < 0:
+            raise ValueError("coefficient_atol must be finite and non-negative")
+        metadata, values, basis = self._harmonic_basis(dim, a, b, max_features)
         simplex_count = self._laplacian_rows(dim, a)
         simplices = self.simplices_by_dimension[dim][:simplex_count]
         labels = (
@@ -1362,10 +1547,10 @@ class Complex:
             else None
         )
         features = []
-        for eigen_index in harmonic_indices:
+        for eigen_index, eigenvalue in enumerate(values):
             coefficients = []
             for simplex_index, (simplex, coefficient) in enumerate(
-                zip(simplices, vectors_np[:, eigen_index])
+                zip(simplices, basis[:, eigen_index])
             ):
                 coefficient_float = float(coefficient)
                 if abs(coefficient_float) < coefficient_atol:
@@ -1380,25 +1565,67 @@ class Complex:
                 coefficients.append(item)
             features.append(
                 {
-                    "eigenvalue": float(values_np[eigen_index]),
+                    "eigenvalue": float(eigenvalue),
                     "simplex_coefficients": coefficients,
                 }
             )
+        return {**metadata, "features": features}
+
+    def harmonic_participation(
+        self,
+        dim: int,
+        a: float,
+        b: float | None = None,
+        *,
+        max_features: int | None = None,
+    ) -> dict[str, Any]:
+        """Localize the harmonic space using diag(H H.T) for orthonormal H.
+
+        Scores are invariant to signs and orthogonal rotations of a complete
+        harmonic basis. They are unnormalized: their sum is the recovered
+        subspace dimension. No dense projector is formed. Each simplex's score
+        is shared equally among its vertices in ``point_participation``; labels
+        are retained when present (e.g. molecule identifiers).
+
+        Check ``participation_complete`` before treating scores as invariants of
+        the full harmonic space. With a truncated or unverified sparse solve,
+        they describe only the computed subspace, whose choice can vary. This
+        method has the same allocation guards as :meth:`harmonic_features`.
+        """
+        metadata, _, basis = self._harmonic_basis(dim, a, b, max_features)
+        scores = np.einsum("ij,ij->i", basis, basis)
+        simplices = self.simplices_by_dimension[dim][: len(scores)]
+        simplex_labels = self.simplex_labels_by_dimension
+        point_scores = {
+            simplex[0]: 0.0
+            for simplex in self.simplices_by_dimension[0][: self._laplacian_rows(0, a)]
+        }
+        participation = []
+        for index, (simplex, score) in enumerate(zip(simplices, scores)):
+            item: dict[str, Any] = {
+                "simplex_index": index,
+                "simplex": list(simplex),
+                "participation": float(score),
+            }
+            if simplex_labels is not None:
+                item["labels"] = list(simplex_labels[dim][index])
+            participation.append(item)
+            for vertex in simplex:
+                point_scores[vertex] += float(score) / len(simplex)
+        points = []
+        for vertex, score in point_scores.items():
+            point: dict[str, Any] = {"vertex": vertex, "participation": score}
+            if self.point_labels is not None:
+                point["label"] = self.point_labels[vertex]
+            points.append(point)
+        complete = metadata["features_complete"]
         return {
-            "dimension": dim,
-            "filtration_a": float(a),
-            "filtration_b": float(b),
-            "betti": authoritative if authoritative is not None else len(features),
-            "spectral_nullity": numerical_nullity,
-            "returned_features": len(features),
-            "features_complete": (
-                (authoritative is None or len(features) == authoritative)
-                and calculation_status
-                not in {"spectral_nullity_mismatch", "sparse_spectrum_unverified"}
-            ),
-            "calculation_status": calculation_status,
-            "zero_tolerance": tolerance,
-            "features": features,
+            **metadata,
+            "participation_complete": complete,
+            "participation_scope": "full_harmonic_space" if complete else "computed_subspace",
+            "total_participation": float(scores.sum()),
+            "simplex_participation": participation,
+            "point_participation": points,
         }
 
     def nonzero_spectra(

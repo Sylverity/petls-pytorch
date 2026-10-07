@@ -36,7 +36,7 @@ class BenchmarkResult:
     total_time_ms: float = 0.0  # build + eigs
     eigenvalue_count: int = 0
     betti: int = 0
-    least_nonzero: float = 0.0
+    least_nonzero: Optional[float] = 0.0
     algorithm: str = "eigvalsh"
     device: str = "cpu"
     seed: int = 42
@@ -48,6 +48,12 @@ class BenchmarkResult:
     failed: bool = False
     failure_reason: str = ""
     dtype: str = "float32"
+    positive_modes: list = field(default_factory=list)
+    calculation_status: str = ""
+    iterations: int = 0
+    working_block_size: int = 0
+    nullspace_handling: str = ""
+    range_reconstruction_error: Optional[float] = None
 
 
 @dataclass
@@ -135,6 +141,8 @@ class BenchmarkRunner:
         self.algorithm = algorithm
         self.device = device
         self.package = package.lower()
+        if algorithm == "partial" and self.package != "petls-pytorch":
+            raise ValueError("partial requires petls-pytorch")
         if dtype not in {"float32", "float64"}:
             raise ValueError("dtype must be 'float32' or 'float64'")
         self.dtype = dtype
@@ -213,7 +221,8 @@ class BenchmarkRunner:
                 if torch.cuda.is_available():
                     torch.empty(1, device=self.device)
                     _ = solve_eigenvalues(
-                        torch.eye(300, device=device, dtype=dtype), self.algorithm
+                        torch.eye(300, device=device, dtype=dtype),
+                        "eigvalsh" if self.algorithm == "partial" else self.algorithm,
                     )
                     torch.cuda.synchronize()
         elif package == "petls":
@@ -334,7 +343,8 @@ class BenchmarkRunner:
 
         complex_obj = ds["complex"]
         if package == "petls-pytorch":
-            complex_obj.set_eigs_algorithm(self.algorithm)
+            if self.algorithm != "partial":
+                complex_obj.set_eigs_algorithm(self.algorithm)
         else:
             complex_obj.set_eigs_Algorithm(self.algorithm)
         filtrations = ds["filtrations"]
@@ -401,6 +411,61 @@ class BenchmarkRunner:
         row_cap = max_matrix_rows if max_matrix_rows is not None else self.max_matrix_rows
         for request_index, (dim, a, b) in enumerate(requests, start=1):
             rows_estimate = self._estimate_matrix_rows(complex_obj, dim, a)
+            if self.algorithm == "partial":
+                if row_cap is not None:
+                    complex_obj.max_matrix_rows = row_cap
+                self._synchronize(package)
+                started = time.perf_counter()
+                try:
+                    modes = complex_obj.positive_spectrum(dim, a, b)
+                except Exception as error:
+                    record_failure(
+                        "positive_spectrum",
+                        error,
+                        rows_estimate or 0,
+                        (time.perf_counter() - started) * 1000,
+                    )
+                    continue
+                self._synchronize(package)
+                result = BenchmarkResult(
+                    package=package,
+                    dataset=dataset_name,
+                    n_points=n_points,
+                    complex_type=complex_type,
+                    max_dim=max_dim,
+                    dim=dim,
+                    filtration_a=a,
+                    filtration_b=b,
+                    matrix_rows=modes["matrix_rows"],
+                    build_time_ms=1000 * modes["construction_s"],
+                    eigs_time_ms=1000 * modes["solve_s"],
+                    total_time_ms=1000 * (time.perf_counter() - started),
+                    eigenvalue_count=len(modes["smallest_eigenvalues"]),
+                    betti=modes["betti"],
+                    least_nonzero=modes["least_nonzero_eigenvalue"],
+                    algorithm=self.algorithm,
+                    device=modes["spectrum_device"],
+                    dtype="float64",
+                    seed=seed,
+                    config_index=config_index,
+                    request_index=request_index,
+                    complex_build_time_ms=t_build_complex,
+                    positive_modes=modes["positive_modes"],
+                    iterations=modes["iterations"],
+                    working_block_size=modes["working_block_size"],
+                    nullspace_handling=modes["nullspace_handling"],
+                    range_reconstruction_error=modes["range_reconstruction_error"],
+                    calculation_status=modes["calculation_status"],
+                    failed=modes["calculation_status"]
+                    not in {"partial_spectrum", "null_modes_only"},
+                    failure_reason=modes["calculation_status"]
+                    if modes["calculation_status"] not in {"partial_spectrum", "null_modes_only"}
+                    else "",
+                )
+                results.append(result)
+                if on_result is not None:
+                    on_result(result)
+                continue
             if row_cap is not None and rows_estimate is not None and rows_estimate > row_cap:
                 result = BenchmarkResult(
                     package=package,

@@ -54,9 +54,20 @@ def test_weight_validation_and_finite_inputs():
         Alpha(points=[[0.0, 0.0], [float("inf"), 1.0]])
 
 
-def test_weighted_ring_has_one_tunnel_and_negative_vertex_births():
+def test_weighted_ring_has_one_tunnel_and_negative_vertex_births(monkeypatch):
+    import petls_pytorch.utils.simplex_tree as extraction
+
+    original = extraction.simplex_tree_boundaries_filtrations
+    calls = []
+
+    def counted(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(extraction, "simplex_tree_boundaries_filtrations", counted)
     alpha = Alpha(points=_ring(), weights=_ring_weights(), max_dim=2)
 
+    assert len(calls) == 1
     assert alpha.betti_numbers_at(0.0)[1] == 1
     assert min(alpha.simplex_filtrations[0]) < 0.0
     assert alpha.get_all_filtrations()[0] < 0.0
@@ -133,8 +144,18 @@ def test_unweighted_and_zero_weight_alpha_have_parity():
     )
 
 
-def test_persistence_intervals_and_persistent_betti_queries():
-    alpha = Alpha(points=_ring(), weights=_ring_weights(), max_dim=2)
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable"),
+        ),
+    ],
+)
+def test_persistence_intervals_and_persistent_betti_queries(device, monkeypatch):
+    alpha = Alpha(points=_ring(), weights=_ring_weights(), max_dim=2, device=device)
     intervals = alpha.persistence_intervals(dim=1)
 
     assert intervals.ndim == 2 and intervals.shape[1] == 2
@@ -143,6 +164,43 @@ def test_persistence_intervals_and_persistent_betti_queries():
     persistent = alpha.topology_summary(dimensions=(1,), a=0.0, b=0.5)
     assert persistent["betti_kind"] == "persistent"
     assert persistent["betti"][1] == 1
+
+    from petls_pytorch.core.low_modes import build_operator
+
+    # Singular Schur block: two new edges share one new triangle.
+    tree = gudhi.SimplexTree()
+    tree.insert([0, 1], filtration=0.0)
+    tree.insert([0, 1, 2], filtration=1.0)
+    cases = [
+        Complex(simplex_tree=tree, device=device),
+        Alpha(points=np.random.default_rng(4).normal(size=(60, 3)), device=device),
+    ]
+    for item in cases:
+        for dimension in (0, 1, 2):
+            a, b = (0.0, 1.0) if item is cases[0] else (0.3, 0.8)
+            dense = item.get_L(dimension, a, b).double()
+            op = build_operator(item, dimension, a, b)
+            if not len(dense):
+                continue
+            vectors = torch.randn(len(dense), 3, device=device, dtype=torch.float64)
+            torch.testing.assert_close(op(vectors), dense @ vectors, rtol=1e-9, atol=1e-10)
+            values = torch.linalg.eigvalsh(dense).cpu().numpy()
+            betti = item.persistent_betti(dimension, a, b)
+            with monkeypatch.context() as guard:
+                guard.setattr(
+                    item, "get_L", lambda *args: pytest.fail("partial route built a dense L")
+                )
+                summary = item.topology_summary([dimension], a, b, positive_modes=3)
+            expected = values[betti : betti + 3]
+            actual = [v["value"] for v in summary["positive_modes"][dimension]]
+            np.testing.assert_allclose(actual, expected, atol=1e-8, rtol=1e-5)
+            assert summary["betti"][dimension] == betti
+            if summary["nullspace_handling"][dimension] == "range_restriction":
+                assert summary["spectral_nullity"][dimension] is None
+                assert summary["range_reconstruction_error"][dimension] < 1e-8
+            else:
+                assert summary["spectral_nullity"][dimension] == betti
+            assert summary["spectrum_device"][dimension].startswith(device)
 
 
 def test_topology_summary_defaults_follow_complex_dimension():
@@ -170,7 +228,7 @@ def test_topology_summary_returns_empty_result_above_complex_dimension():
     assert summary["spectral_nullity"][1] == 0
     assert summary["matrix_rows"][1] == 0
     assert summary["smallest_eigenvalues"][1] == []
-    assert summary["calculation_status"][1] == "complete"
+    assert summary["calculation_status"][1] == "null_modes_only"
     assert complex_.spectra(1, 0.0, 0.0) == []
 
 
@@ -253,8 +311,12 @@ def test_dense_guard_and_sparse_spectrum_avoid_dense_laplacian(monkeypatch):
         on_oversize="homology_only",
     )
     assert summary["betti"][1] == 1
-    assert summary["calculation_status"][1] == "homology_only_oversize"
-    assert summary["least_nonzero_eigenvalue"][1] is None
+    assert summary["calculation_status"][1] == "partial_spectrum"
+    assert summary["least_nonzero_eigenvalue"][1] > 0
+    alpha.max_matrix_bytes = 1
+    guarded = alpha.topology_summary((1,), -0.03, 0.0, on_oversize="homology_only")
+    assert guarded["calculation_status"][1] == "homology_only_oversize"
+    assert guarded["betti"][1] == summary["betti"][1]
 
     isolated_tree = gudhi.SimplexTree()
     for vertex in range(300):
@@ -272,7 +334,7 @@ def test_dense_guard_and_sparse_spectrum_avoid_dense_laplacian(monkeypatch):
     assert disconnected.ordinary_spectrum(0, 0.0, 10) == [0.0] * 10
     disconnected_summary = disconnected.topology_summary((0,), 0.0, 0.0)
     assert disconnected_summary["betti"][0] == 300
-    assert disconnected_summary["calculation_status"][0] == "sparse_null_modes_only"
+    assert disconnected_summary["calculation_status"][0] == "null_modes_only"
     assert disconnected_summary["least_nonzero_eigenvalue"][0] is None
 
 
@@ -331,16 +393,36 @@ def test_sparse_ordinary_spectrum_honors_order(
     assert complex_.ordinary_spectrum(0, 0.0, count) == expected
 
 
-def test_sparse_summary_recovers_and_certifies_repeated_nullspace():
-    component_count = 17
-    vertices_per_component = 30
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable"),
+        ),
+    ],
+)
+@pytest.mark.parametrize("component_count,vertices_per_component", [(17, 30), (17, 100), (300, 3)])
+def test_sparse_summary_excludes_repeated_nullspace_without_solving_it(
+    device, monkeypatch, component_count, vertices_per_component
+):
     complex_ = Complex(
         simplex_tree=_disconnected_chains_tree(component_count, vertices_per_component),
         dtype=torch.float64,
+        device=device,
         eigs_algorithm="sparse",
     )
     complex_.set_eigs_algorithm("sparse", num_eigenvalues=20)
 
+    import scipy.sparse.linalg
+
+    monkeypatch.setattr(
+        scipy.sparse.linalg, "lobpcg", lambda *a, **kw: pytest.fail("CPU eigensolver used")
+    )
+    monkeypatch.setattr(
+        scipy.sparse.linalg, "eigsh", lambda *a, **kw: pytest.fail("CPU eigensolver used")
+    )
     summary = complex_.topology_summary(
         dimensions=(0,),
         a=0.0,
@@ -350,12 +432,20 @@ def test_sparse_summary_recovers_and_certifies_repeated_nullspace():
 
     expected_gap = 2.0 - 2.0 * math.cos(math.pi / vertices_per_component)
     assert summary["betti"][0] == component_count
-    assert summary["spectral_nullity"][0] == component_count
+    assert summary["spectral_nullity"][0] is None
+    assert summary["nullspace_handling"][0] == "range_restriction"
+    assert summary["working_block_size"][0] == 16
+    assert summary["range_reconstruction_error"][0] < 1e-8
     assert summary["least_nonzero_eigenvalue"][0] == pytest.approx(expected_gap, rel=1e-7)
-    assert summary["calculation_status"][0] == "sparse_lowest_spectrum"
-    assert summary["spectrum_solver"][0] == "lobpcg"
-    assert summary["spectrum_certified"][0] is True
-    assert summary["spectrum_max_normalized_residual"][0] <= 1e-8
+    assert summary["calculation_status"][0] == "partial_spectrum"
+    assert summary["spectrum_solver"][0] == "torch_range_partial"
+    assert all(mode["relative_residual"] <= 1e-3 for mode in summary["positive_modes"][0])
+
+    assert len(summary["positive_modes"][0]) == 8
+    assert all(
+        mode["quality"] in {"certified", "approximate"} for mode in summary["positive_modes"][0]
+    )
+    assert summary["spectrum_device"][0].startswith(device)
 
 
 def test_sparse_summary_never_reports_gap_when_arpack_misses_null_modes(monkeypatch):
@@ -379,7 +469,7 @@ def test_sparse_summary_never_reports_gap_when_arpack_misses_null_modes(monkeypa
 
     monkeypatch.setattr(scipy.sparse.linalg, "eigsh", incomplete_scalar_spectrum)
 
-    summary = complex_.topology_summary(dimensions=(0,), a=0.0, b=0.0)
+    summary = complex_.topology_summary(dimensions=(0,), a=0.0, b=0.0, spectral_mode="full")
 
     assert summary["betti"][0] == 17
     assert summary["spectral_nullity"][0] == 7
@@ -387,6 +477,37 @@ def test_sparse_summary_never_reports_gap_when_arpack_misses_null_modes(monkeypa
     assert summary["calculation_status"][0] == "spectral_nullity_mismatch"
     assert summary["spectrum_solver"][0] == "arpack"
     assert summary["spectrum_certified"][0] is False
+
+    import petls_pytorch.core.low_modes as low
+
+    matrix = torch.as_tensor(complex_.get_L_sparse(0, 0.0).toarray(), dtype=torch.float64)
+    exact_values, exact_vectors = torch.linalg.eigh(matrix)
+
+    def contaminated_range(operator, count, *args, **kwargs):
+        # Even a converged zero eigenvector cannot be advertised as positive.
+        return exact_values[:count], exact_vectors[:, :count], 1, 1.0
+
+    monkeypatch.setattr(low, "block_lowest", contaminated_range)
+    partial = complex_.topology_summary((0,))
+    assert partial["spectral_nullity"][0] is None
+    assert partial["least_nonzero_eigenvalue"][0] is None
+    assert all(mode["quality"] == "unavailable" for mode in partial["positive_modes"][0])
+
+    # A poor final positive mode must not erase an independently converged gap.
+    def mixed_quality_block(operator, count, *args, **kwargs):
+        vectors = exact_vectors[:, 17 : 17 + count].clone()
+        vectors[:, -1] = 0.9999995 * vectors[:, -1] + 0.001 * exact_vectors[:, -1]
+        vectors[:, -1] /= torch.linalg.vector_norm(vectors[:, -1])
+        values = exact_values[17 : 17 + count].clone()
+        values[-1] = vectors[:, -1] @ matrix @ vectors[:, -1]
+        return values, vectors, 1, 0.0
+
+    monkeypatch.setattr(low, "block_lowest", mixed_quality_block)
+    partial = complex_.topology_summary((0,))
+    assert partial["positive_modes"][0][0]["quality"] == "certified"
+    assert partial["positive_modes"][0][-1]["quality"] == "unavailable"
+    assert partial["least_nonzero_eigenvalue"][0] == pytest.approx(float(exact_values[17]))
+    assert partial["spectrum_certified"][0] is True
 
 
 def test_oversized_harmonic_features_have_explicit_ordinary_and_persistent_behavior():

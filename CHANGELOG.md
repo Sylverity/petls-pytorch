@@ -1,9 +1,31 @@
 # Changelog
 
-## Unreleased
+## Unreleased (1.2.0)
+
+- Restrict large partial eigensolves to the Laplacian range: avoid solving for
+  the harmonic block, bound preimage conditioning, and refresh preimages on the
+  configured device when needed. Use the screening tolerance for stopping.
+- Report range reconstruction, working block size, and explicit nullspace
+  handling; leave numerical nullity unset when zero modes were not computed.
+
+
+- Make Gudhi-backed topology summaries default to eight leading positive modes
+  with per-mode quality and independent homology checks.
+- Add device-resident partial ordinary and matrix-free persistent solves,
+  bounded workspaces, and construction/solve diagnostics; no CPU spectral fallback.
+- Extract Alpha boundaries once while preserving its orientation convention.
+- Preserve explicit full-spectrum and harmonic-localization APIs.
+
 
 ### Fixed
 
+- Decoupled real positive-mode selection and rank from modulo-11 homology.
+  Torsion no longer causes complete solves to skip positive eigenvalues or
+  reject valid spectra; coefficient-field agreement is reported separately.
+- Made harmonic-localization completeness describe the recovered real kernel,
+  independently of modular Betti counts, with explicit unknown/partial states.
+- Reject numerically singular Cholesky pivots in persistent Schur corrections,
+  including CUDA factorizations that report success on a singular Gram block.
 - Preserved small positive eigenvalues and their multiplicities using the configured zero tolerance in `nonzero_spectra()`.
 - Cleared obsolete topology and geometric mappings when replacing boundaries, while preserving the original complex on invalid updates.
 - Included rectangular boundary allocations in dense memory guards.
@@ -11,6 +33,8 @@
 
 ### Added
 
+- Added `harmonic_participation()` with basis-invariant projector-diagonal scores,
+  point/label localization, and explicit flags for incomplete harmonic subspaces.
 - Reproducible topology and molecular-crystal demos.
 
 ### Changed

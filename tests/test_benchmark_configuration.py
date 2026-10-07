@@ -35,7 +35,7 @@ def test_generate_dataset_passes_device_and_dtype(complex_type):
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
-def test_alpha_benchmark_honors_cuda_device():
+def test_alpha_benchmark_honors_cuda_device(tmp_path, monkeypatch):
     data = generate_dataset(
         name="sphere",
         n_points=12,
@@ -49,6 +49,21 @@ def test_alpha_benchmark_honors_cuda_device():
 
     assert data["complex"].device.type == "cuda"
     assert data["complex"].dtype == torch.float32
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Partial benchmark must not construct a full Laplacian")
+
+    monkeypatch.setattr(type(data["complex"]), "get_L", forbidden)
+    runner = BenchmarkRunner(
+        output_dir=str(tmp_path), algorithm="partial", device="cuda", verbose=False
+    )
+    results = runner.run_trial(
+        dataset_name="sphere", n_points=12, max_dim=1, num_filtrations=3, dims=[0, 1]
+    )
+    assert results and any(row.filtration_a < row.filtration_b for row in results)
+    assert all(not row.failed and not row.skipped for row in results)
+    assert all(row.device.startswith("cuda") and row.dtype == "float64" for row in results)
+    assert any(row.positive_modes for row in results)
 
 
 def test_benchmark_dtype_validation(tmp_path):

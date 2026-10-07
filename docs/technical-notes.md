@@ -80,6 +80,55 @@ Gudhi homology uses coefficients in the field of integers modulo 11. Laplacian
 nullity is computed numerically over the reals; the two quantities are reported
 separately because their coefficient fields differ.
 
+`positive_spectrum()`, `topology_summary()`, and localization results expose
+`homology_coeff_field` (11), `spectral_coeff_field` (`"real"`), and
+`homology_spectral_agreement`. Agreement is `True` or `False` when the complete
+real numerical nullity is available, and `None` when it is not. A disagreement
+can arise from torsion, coefficient-dependent persistent maps, or numerical
+tolerances; it does not by itself invalidate real eigenpairs. Complete solves
+select positive modes with a zero tolerance based on the complete real spectrum.
+Range solves determine their working subspace from the operator, without using
+the modular Betti count as the real rank or number of eigenvalues to skip.
+
+### Basis-invariant harmonic participation
+
+`harmonic_features()` returns an orthonormal numerical real kernel basis. Its
+individual vectors can change sign or rotate within a repeated zero eigenspace.
+They are not canonical persistence-interval representatives. For localization
+of the whole harmonic space, use:
+
+```python
+participation = alpha.harmonic_participation(dim=1, a=0.0, b=0.0)
+if participation["participation_complete"]:
+    simplices = participation["simplex_participation"]
+    points = participation["point_participation"]
+```
+
+For an orthonormal harmonic basis `H`, the simplex scores are
+`diag(H @ H.T)`, computed as row sums of squares without allocating the dense
+projector. A rotation `H @ Q` with orthogonal `Q` leaves these scores unchanged.
+Scores are not normalized to probabilities: their sum is the number of recovered
+harmonic directions. Each simplex's score is divided equally among its vertices
+for `point_participation`, preserving the total. Simplex labels and point labels
+(for example, molecule identifiers) are included when available. Repeated labels
+remain separate point records and can be summed by the caller.
+
+`max_features` limits the returned harmonic directions. Oversized ordinary
+localization defaults to at most ten directions; persistent localization retains
+its dense allocation guard. If the full numerical kernel is not recovered,
+`participation_complete=False` and `participation_scope="computed_subspace"`.
+Such scores are invariant only within that selected subspace, whose selection
+can change between solves. They must not be compared as full harmonic-space
+invariants. `spectral_nullity` is `None` when the total numerical kernel dimension
+is unknown; `recovered_nullity` records the zero modes found before the output
+cap. `features_complete` refers to the real kernel, independently of modular
+Betti counts. The coefficient display cutoff in `harmonic_features()` is not
+applied to participation scores.
+
+These scores localize the harmonic space collectively, not individual holes.
+Across frames or scales, coordinate correspondence is still required; basis
+invariance alone is not a stability or feature-tracking theorem.
+
 Ordinary oversized localization can use the sparse path and limit automatic
 representatives with `max_features`. Persistent localization requires a dense
 Schur-complement calculation and observes the configured allocation guard.
@@ -128,18 +177,55 @@ spectrum. Sparse orders `SM`, `SA`, `LM`, `LA`, and `BE` are supported.
 `ordinary_spectrum(dim, scale, num_eigenvalues)` provides a bounded sparse solve
 without constructing the full dense operator.
 
-Gudhi-backed ordinary summaries use block LOBPCG when repeated zero modes need
-more reliable nullspace recovery. Residuals, orthogonality, and numerical
-nullity are audited before a spectral gap is reported. Certified summaries
-expose `spectrum_solver`, `spectrum_certified`, and
-`spectrum_max_normalized_residual`; incomplete recovery leaves
-`least_nonzero_eigenvalue` unset and records an explicit status.
+Gudhi-backed `topology_summary()` defaults to `spectral_mode="partial"`.
+`positive_spectrum(dim, a, b, positive_modes=8, max_iterations=1000,
+relative_tolerance=1e-3)` exposes the same implementation. Sparse operator
+applications, Rayleigh–Ritz iterations, and residual checks run on the requested
+device in float64; CPU sparse geometry/indexing is still used during construction.
+Small problems use a complete device solve internally and return the requested
+leading modes. Larger problems use a block iteration through public Torch APIs.
 
-Persistent `a < b` Schur complements can become dense. Allocation guards count
-both the final matrix at `a` and the larger intermediate at `b`. The flipped
-top-dimensional optimization is restricted to complete `eigvalsh` solves where
-the algebraic top boundary has no higher-dimensional up term. Partial spectra
-use the ordinary sparse path so kernel dimensions remain correct.
+Large partial solves restrict the search to `range(L)`, which is orthogonal to
+`ker(L)` for a symmetric Laplacian. They carry preimages through every basis
+transformation and explicitly reconstruct `X = L Y`; initializing a random
+block in the range alone would allow roundoff to leak back into the kernel.
+The working block has at most twice the requested positive-mode count,
+independent of the Betti multiplicity. Ill-conditioned preimage directions are
+dropped; every 100 iterations, and when search directions are exhausted,
+device CG solves consistent
+`L Y = X` equations to refresh bounded preimages. These solves do not construct
+a nullspace basis. All operator products, block operations, and CG iterations
+remain on the selected device. This is not shift-invert or randomized spectral
+compression.
+
+For persistent queries the operator is a sparse base minus `C.T @ pinv(D) @ C`.
+Only the active eliminated block `D` is dense; a Cholesky inverse is used when
+positive definite, otherwise a Hermitian pseudoinverse. The complete persistent
+Laplacian is never materialized on the large-problem path.
+
+`relative_tolerance` now controls stopping as well as acceptance: all requested
+positive modes must meet their relative residual threshold, or the iteration
+budget ends. Final residuals are evaluated again against the original operator.
+Each mode records value, absolute residual, relative residual, and quality.
+Strict residuals, orthogonality, and range reconstruction are required for
+`certified`; `approximate` retains a mode meeting the relative residual check.
+These labels are numerical checks, not eigenvalue enclosures or physical
+validation. A difficult later mode does not invalidate a usable first gap.
+
+For range solves `spectral_nullity` is `None` and `smallest_eigenvalues` contains
+only the computed positive Ritz values. They do not pretend to have numerically
+recovered zero modes. GUDHI Betti counts are reported independently. Small
+complete solves and explicit full solves retain their numerical-nullity checks.
+Returned diagnostics include `nullspace_handling`, `working_block_size`,
+`range_reconstruction_error`, construction/solve time, device, iterations, and
+Schur block size. Oversized requests raise `LaplacianSizeError`, or summaries
+with `on_oversize="homology_only"` retain homology without a spectrum.
+
+The explicit full path (`spectral_mode="full"`, `spectra()`, or localization)
+keeps its earlier semantics. Its persistent Schur complements can become dense;
+allocation guards count both final and intermediate matrices. Its legacy sparse
+ordinary solver uses SciPy on CPU. These explicit APIs do not select the new
+partial path through `set_eigs_algorithm()`.
 
 ## Benchmarks
 
@@ -185,3 +271,18 @@ higher-precision weighted-Alpha measurements. Check `nvidia-smi` and
 
 The full development and parity-test commands live in
 [CONTRIBUTING.md](../CONTRIBUTING.md).
+
+To benchmark the new ordinary and persistent partial solver with the existing
+harness, select `--algorithm partial`, for example:
+
+```bash
+uv run --extra benchmark python -m benchmark --preset quick \
+  --package petls-pytorch --algorithm partial --device cuda --dtype float64
+```
+
+Saved results include construction time, solve time, complete request wall time,
+per-mode residual/quality records, iterations, and the actual device. The row
+cap applies to the dense eliminated block for this algorithm. Keep `eigvalsh`
+as the full-spectrum reference; comparisons must match filtration pairs and
+positive eigenvalues, not the length of a partial spectrum. Timing checks should
+run on controlled hardware separately from ordinary correctness CI.
