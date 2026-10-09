@@ -222,3 +222,65 @@ def test_benchmark_summary_excludes_skipped_and_handles_empty_suite():
     assert summary["max_matrix_rows"] == 99
     assert BenchmarkSuiteResult("empty").summary()["num_trials"] == 0
     BenchmarkSuiteResult("empty").print_summary()
+
+
+def test_comparison_checks_all_modes_and_keeps_failed_attempt_time():
+    from dataclasses import replace
+
+    from benchmark.compare import validate_results
+
+    reference = BenchmarkResult(
+        package="petls-pytorch",
+        dataset="fixture",
+        n_points=4,
+        complex_type="alpha",
+        max_dim=1,
+        dim=1,
+        filtration_a=0.0,
+        filtration_b=1.0,
+        matrix_rows=4,
+        positive_eigenvalues=[1.0, 2.0, 3.0],
+        spectral_nullity=1,
+    )
+    partial = replace(
+        reference,
+        algorithm="partial",
+        spectral_nullity=None,
+        positive_modes=[{"value": value, "quality": "certified"} for value in [1, 2, 3]],
+    )
+    assert validate_results([partial], [reference])["passed"] == 1
+    wrong_later_mode = replace(partial, positive_eigenvalues=[1, 2, 4])
+    assert validate_results([wrong_later_mode], [reference])["failed"] == 1
+    unavailable = replace(
+        partial, positive_modes=[{"quality": "certified"}, {"quality": "unavailable"}]
+    )
+    assert validate_results([unavailable], [reference])["failed"] == 1
+    assert (
+        validate_results([replace(partial, positive_eigenvalues=[1, 2])], [reference])["failed"]
+        == 1
+    )
+    assert validate_results([], [reference])["failed"] == 1
+    assert validate_results([partial, partial], [reference])["failed"] == 1
+    null_only = replace(reference, positive_eigenvalues=[], spectral_nullity=4)
+    assert validate_results([replace(null_only, algorithm="partial")], [null_only])["passed"] == 1
+    failed = replace(partial, failed=True, total_time_ms=250.0)
+    summary = BenchmarkSuiteResult("failed", [failed]).summary()
+    assert summary["total_time_sec"] == 0
+    assert summary["attempted_time_sec"] == 0.25
+
+
+def test_full_and_partial_benchmarks_keep_matched_requests_and_fields(tmp_path):
+    from benchmark.compare import validate_results
+
+    options = dict(dataset_name="sphere", n_points=12, max_dim=1, num_filtrations=3)
+    suites = []
+    for algorithm in ("eigvalsh", "partial"):
+        runner = BenchmarkRunner(
+            output_dir=str(tmp_path), algorithm=algorithm, dtype="float64", verbose=False
+        )
+        suites.append(runner.run_trial(**options))
+    full, partial = suites
+    assert all(not row.failed and not row.skipped for row in full + partial)
+    assert all(row.betti_source == "gudhi_persistence" for row in full + partial)
+    assert all(row.total_time_ms >= row.build_time_ms + row.eigs_time_ms for row in full + partial)
+    assert validate_results(partial, full)["failed"] == 0

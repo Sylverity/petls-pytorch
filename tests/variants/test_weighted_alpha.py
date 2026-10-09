@@ -412,6 +412,7 @@ def test_sparse_summary_excludes_repeated_nullspace_without_solving_it(
         dtype=torch.float64,
         device=device,
         eigs_algorithm="sparse",
+        max_matrix_rows=64,
     )
     complex_.set_eigs_algorithm("sparse", num_eigenvalues=20)
 
@@ -488,6 +489,7 @@ def test_sparse_summary_never_reports_gap_when_arpack_misses_null_modes(monkeypa
         return exact_values[:count], exact_vectors[:, :count], 1, 1.0
 
     monkeypatch.setattr(low, "block_lowest", contaminated_range)
+    complex_.max_matrix_rows = 64  # Force range iteration independently of crossover tuning.
     partial = complex_.topology_summary((0,))
     assert partial["spectral_nullity"][0] is None
     assert partial["least_nonzero_eigenvalue"][0] is None

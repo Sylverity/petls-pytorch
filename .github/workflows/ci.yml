@@ -82,6 +82,20 @@ jobs:
       - name: Run mypy
         run: uv run --frozen mypy src/petls_pytorch benchmark
 
+      - name: Build and validate distributions
+        if: matrix.python-version == '3.13'
+        run: |
+          uv run --frozen python scripts/check_release.py
+          uv run --frozen python -m build --no-isolation
+          uv run --frozen python scripts/check_release.py --dist-dir dist
+          uv run --frozen python -m twine check --strict dist/*
+
+      - name: Smoke test installed wheel
+        if: matrix.python-version == '3.13'
+        run: |
+          uv pip install --no-deps --target "$RUNNER_TEMP/petls-wheel" dist/*.whl
+          uv run --no-sync python scripts/smoke_wheel.py "$RUNNER_TEMP/petls-wheel"
+
   parity:
     name: PETLS parity
     runs-on: ubuntu-latest

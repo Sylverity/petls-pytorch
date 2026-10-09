@@ -1,0 +1,9 @@
+include CHANGELOG.md CITATION.cff CONTRIBUTING.md uv.lock
+recursive-include tests *.py
+recursive-include tests/variants/data *
+recursive-include benchmark *.py
+recursive-include scripts *.py
+recursive-include docs *.md
+recursive-include docs/assets *.png *.gif
+recursive-include examples *.py *.md *.cif
+global-exclude __pycache__ *.py[cod]

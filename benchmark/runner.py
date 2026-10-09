@@ -1,12 +1,9 @@
 """
 Benchmark runner for PETLS.
 
-Measures wall-clock time for:
-  1. Laplacian matrix construction   (get_L)
-  2. Full eigendecomposition         (spectra)
-  3. End-to-end pipeline             (complex build + spectra)
-
-Supports CPU and GPU backends (GPU via future PyTorch rewrite).
+Measures synchronized operator construction, eigensolving, and complete query
+wall time, including homology and result processing. Complex construction is
+recorded once per dataset. Supports full spectra and device-native partial modes.
 """
 
 import time
@@ -33,7 +30,7 @@ class BenchmarkResult:
     matrix_rows: int
     build_time_ms: float = 0.0  # time to build Laplacian matrix
     eigs_time_ms: float = 0.0  # time for eigendecomposition
-    total_time_ms: float = 0.0  # build + eigs
+    total_time_ms: float = 0.0  # complete query, including homology/result processing
     eigenvalue_count: int = 0
     betti: int = 0
     least_nonzero: Optional[float] = 0.0
@@ -54,6 +51,11 @@ class BenchmarkResult:
     working_block_size: int = 0
     nullspace_handling: str = ""
     range_reconstruction_error: Optional[float] = None
+    positive_eigenvalues: list[float] = field(default_factory=list)
+    spectral_nullity: Optional[int] = None
+    betti_source: str = "laplacian_nullity"
+    spectrum_solver: str = ""
+    eigensolver_device: str = ""
 
 
 @dataclass
@@ -95,6 +97,7 @@ class BenchmarkSuiteResult:
             "num_skipped": len(skipped),
             "num_failed": len(failed),
             "total_time_sec": sum(total_times) / 1000.0,
+            "attempted_time_sec": sum(r.total_time_ms for r in self.results) / 1000.0,
             "complex_build_time_sec": sum(config_builds.values()) / 1000.0,
             "mean_total_ms": float(np.mean(total_times)) if total_times else 0.0,
             "median_total_ms": float(np.median(total_times)) if total_times else 0.0,
@@ -114,6 +117,7 @@ class BenchmarkSuiteResult:
         print(f"  Skipped:         {s['num_skipped']}")
         print(f"  Failed:          {s['num_failed']}")
         print(f"  Trial time:      {s['total_time_sec']:.2f} s")
+        print(f"  All attempts:    {s['attempted_time_sec']:.2f} s")
         print(f"  Complex builds:  {s['complex_build_time_sec']:.2f} s")
         print(f"  Mean trial:      {s['mean_total_ms']:.1f} ms")
         print(f"  Median trial:    {s['median_total_ms']:.1f} ms")
@@ -242,6 +246,8 @@ class BenchmarkRunner:
         return complex_obj.eigs_Algorithm(matrix)
 
     def _estimate_matrix_rows(self, complex_obj, dim: int, a: float) -> Optional[int]:
+        if hasattr(complex_obj, "_laplacian_rows"):
+            return int(complex_obj._laplacian_rows(dim, a))
         if not hasattr(complex_obj, "filtered_boundaries"):
             return None
         if dim == 0:
@@ -321,6 +327,7 @@ class BenchmarkRunner:
         self._print("-" * 60)
 
         # Build dataset & complex
+        self._synchronize(package)
         t0 = time.perf_counter()
         ds = generate_dataset(
             name=dataset_name,
@@ -336,6 +343,7 @@ class BenchmarkRunner:
             compute_matrix_stats=compute_matrix_stats,
             rips_threshold_quantile=rips_threshold_quantile,
         )
+        self._synchronize(package)
         t_build_complex = (time.perf_counter() - t0) * 1000
         self._print(f"  Complex build:       {t_build_complex:.1f} ms")
         self._print(f"  Unique filtrations:  {ds['num_unique_filtrations']}")
@@ -456,6 +464,11 @@ class BenchmarkRunner:
                     nullspace_handling=modes["nullspace_handling"],
                     range_reconstruction_error=modes["range_reconstruction_error"],
                     calculation_status=modes["calculation_status"],
+                    positive_eigenvalues=[mode["value"] for mode in modes["positive_modes"]],
+                    spectral_nullity=modes["spectral_nullity"],
+                    betti_source="gudhi_persistence",
+                    spectrum_solver=modes["spectrum_solver"],
+                    eigensolver_device=modes["spectrum_device"],
                     failed=modes["calculation_status"]
                     not in {"partial_spectrum", "null_modes_only"},
                     failure_reason=modes["calculation_status"]
@@ -465,6 +478,11 @@ class BenchmarkRunner:
                 results.append(result)
                 if on_result is not None:
                     on_result(result)
+                self._print(
+                    f"  [{request_index:02d}/{len(requests):02d}] dim={dim} "
+                    f"size={result.matrix_rows:5d} | total={result.total_time_ms:8.1f}ms | "
+                    f"{result.calculation_status} | {result.spectrum_solver}"
+                )
                 continue
             if row_cap is not None and rows_estimate is not None and rows_estimate > row_cap:
                 result = BenchmarkResult(
@@ -499,6 +517,7 @@ class BenchmarkRunner:
             # Matrix construction time
             self._synchronize(package)
             t0 = time.perf_counter()
+            query_started = t0
             try:
                 L = complex_obj.get_L(dim, a, b)
             except Exception as e:
@@ -567,7 +586,30 @@ class BenchmarkRunner:
                 )
                 continue
 
-            betti, lam = complex_obj.eigenvalues_summarize(eigs)
+            nullity, lam = complex_obj.eigenvalues_summarize(eigs)
+            betti, betti_source = nullity, "laplacian_nullity"
+            positive_values = []
+            solver_device = self.device if package == "petls-pytorch" else "cpu"
+            if package == "petls-pytorch":
+                import torch
+                from petls_pytorch.core.eigenvalues import _CUDA_CPU_FALLBACK_ROWS
+
+                values = (
+                    eigs.detach().cpu().numpy()
+                    if isinstance(eigs, torch.Tensor)
+                    else np.asarray(eigs)
+                )
+                tolerance = complex_obj._zero_tolerance(values)
+                positive_values = np.sort(values[values > tolerance]).tolist()
+                if complex_obj.simplex_tree is not None:
+                    betti = complex_obj.persistent_betti(dim, a, b)
+                    betti_source = "gudhi_persistence"
+                if self.algorithm == "sparse" or (
+                    self.device.startswith("cuda") and 1 < rows <= _CUDA_CPU_FALLBACK_ROWS
+                ):
+                    solver_device = "cpu"
+            self._synchronize(package)
+            query_time_ms = (time.perf_counter() - query_started) * 1000
 
             result = BenchmarkResult(
                 package=package,
@@ -576,12 +618,12 @@ class BenchmarkRunner:
                 complex_type=complex_type,
                 max_dim=max_dim,
                 dim=dim,
-                filtration_a=round(a, 6),
-                filtration_b=round(b, 6),
+                filtration_a=a,
+                filtration_b=b,
                 matrix_rows=rows,
                 build_time_ms=t_build,
                 eigs_time_ms=t_eigs,
-                total_time_ms=t_build + t_eigs,
+                total_time_ms=query_time_ms,
                 eigenvalue_count=len(eigs),
                 betti=int(betti),
                 least_nonzero=float(lam),
@@ -592,6 +634,11 @@ class BenchmarkRunner:
                 config_index=config_index,
                 request_index=request_index,
                 complex_build_time_ms=t_build_complex,
+                positive_eigenvalues=positive_values,
+                spectral_nullity=int(nullity),
+                betti_source=betti_source,
+                spectrum_solver=self.algorithm,
+                eigensolver_device=solver_device,
             )
             results.append(result)
             if on_result is not None:

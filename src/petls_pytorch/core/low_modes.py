@@ -2,7 +2,8 @@
 
 Geometry/boundary indexing may use CPU sparse matrices. Operator applications,
 Schur solves, Rayleigh--Ritz steps and residuals stay on the requested device.
-No dense full-size persistent Laplacian or projector is constructed.
+The large-problem route constructs neither a dense full-size persistent
+Laplacian nor a projector. Bounded small problems use a complete device solve.
 """
 
 from __future__ import annotations
@@ -13,6 +14,12 @@ from time import perf_counter
 import numpy as np
 import scipy.sparse as sp
 import torch
+
+
+# Device iterations have substantial launch/synchronization overhead on small
+# matrices. Crossovers measured by benchmark.compare on the standard workload;
+# larger matrices and tight allocation budgets retain the range iteration.
+_SMALL_COMPLETE_MAX_ROWS = {"cpu": 1536, "cuda": 2560}
 
 
 def _tensor(matrix, device, dtype):
@@ -253,7 +260,12 @@ def positive_modes(complex_, dim, a, b, count=8, max_iterations=1000, relative_t
         torch.cuda.synchronize(op.base.device)
     construction_s = perf_counter() - started
     started = perf_counter()
-    dense = rows <= max(64, 3 * width)
+    dense = rows <= max(_SMALL_COMPLETE_MAX_ROWS.get(complex_.device.type, 64), 3 * width)
+    dense = (
+        dense
+        and (complex_.max_matrix_rows is None or rows <= complex_.max_matrix_rows)
+        and (budget is None or rows * rows * 8 * 8 <= budget)
+    )
     range_error = 0.0
     nullity = None
     solver = "torch_range_partial"

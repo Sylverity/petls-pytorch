@@ -27,7 +27,7 @@ body:
     id: version
     attributes:
       label: petls-pytorch version
-      placeholder: "1.1.2"
+      placeholder: "1.2.0"
     validations:
       required: true
   - type: input
