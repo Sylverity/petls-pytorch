@@ -70,6 +70,9 @@ def test_torsion_does_not_skip_real_positive_modes(device, a, b):
         assert reference[1] > reference[0] + 1e-5
 
     for count in (8, 24, 128):
+        # Exercise the range route under a dense allocation guard, then the
+        # complete route; dispatch thresholds may change with benchmark tuning.
+        complex_.max_matrix_rows = 64 if count == 8 else 12_000
         result = complex_.positive_spectrum(1, a, b, positive_modes=count)
         assert result["homology_coeff_field"] == 11
         assert result["spectral_coeff_field"] == "real"
@@ -233,7 +236,7 @@ def test_zero_operator_and_insufficient_real_rank_are_handled_without_modular_ra
     for vertex in range(100):
         tree.insert([vertex], filtration=0)
     tree.insert([0, 1], filtration=0)
-    complex_ = Complex(simplex_tree=tree, dtype=torch.float64)
+    complex_ = Complex(simplex_tree=tree, dtype=torch.float64, max_matrix_rows=64)
     result = complex_.positive_spectrum(0, 0)
     assert result["least_nonzero_eigenvalue"] == pytest.approx(2)
     assert len(result["positive_modes"]) == 1
@@ -241,3 +244,34 @@ def test_zero_operator_and_insufficient_real_rank_are_handled_without_modular_ra
     zero = complex_.positive_spectrum(0, -1)
     assert zero["calculation_status"] == "null_modes_only"
     assert zero["positive_modes"] == []
+
+
+@pytest.mark.parametrize("device", DEVICES)
+@pytest.mark.parametrize("guard", [None, "rows", "bytes"])
+def test_small_complete_dispatch_respects_allocation_guards(device, guard):
+    # A connected cycle has one real zero mode and known repeated positive
+    # modes. It is above the old 64-row cutoff but small enough for dense solves.
+    tree = gudhi.SimplexTree()
+    count = 90
+    for i in range(count):
+        tree.insert([i, (i + 1) % count], filtration=0)
+    kwargs = {}
+    if guard == "rows":
+        kwargs["max_matrix_rows"] = 64
+    if guard == "bytes":
+        # Fits the range workspace (90 * 16 * 8 * 16), not dense (90**2 * 8 * 8).
+        kwargs["max_matrix_bytes"] = 200_000
+    complex_ = Complex(simplex_tree=tree, dtype=torch.float64, device=device, **kwargs)
+    result = complex_.positive_spectrum(0, 0)
+    expected = np.sort(2 - 2 * np.cos(2 * np.pi * np.arange(1, count) / count))[:8]
+    np.testing.assert_allclose(
+        [mode["value"] for mode in result["positive_modes"]], expected, rtol=1e-5
+    )
+    assert all(mode["quality"] != "unavailable" for mode in result["positive_modes"])
+    if guard is None:
+        assert result["spectrum_solver"] == "torch_small_complete"
+        assert result["spectral_nullity"] == 1
+    else:
+        assert result["spectrum_solver"] == "torch_range_partial"
+        assert result["spectral_nullity"] is None
+    assert result["spectrum_device"].startswith(device)

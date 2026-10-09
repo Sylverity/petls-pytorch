@@ -183,7 +183,10 @@ relative_tolerance=1e-3)` exposes the same implementation. Sparse operator
 applications, Rayleigh–Ritz iterations, and residual checks run on the requested
 device in float64; CPU sparse geometry/indexing is still used during construction.
 Small problems use a complete device solve internally and return the requested
-leading modes. Larger problems use a block iteration through public Torch APIs.
+leading modes. The measured crossover limits are 1,536 rows on CPU and 2,560 on
+CUDA. Dense workspace and row guards take precedence: if a complete solve would
+exceed either guard, the solver uses range iteration when its workspace fits.
+Larger problems use a block iteration through public Torch APIs.
 
 Large partial solves restrict the search to `range(L)`, which is orthogonal to
 `ker(L)` for a symmetric Laplacian. They carry preimages through every basis
@@ -226,8 +229,34 @@ keeps its earlier semantics. Its persistent Schur complements can become dense;
 allocation guards count both final and intermediate matrices. Its legacy sparse
 ordinary solver uses SciPy on CPU. These explicit APIs do not select the new
 partial path through `set_eigs_algorithm()`.
+The explicit dense CUDA solver also transfers matrices of 2–512 rows to CPU
+for eigendecomposition; the partial API's complete small-matrix route stays on
+the requested device.
 
 ## Benchmarks
+
+For a repeatable comparison of the current default and full-spectrum solvers:
+
+```bash
+OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 \
+  uv run --extra benchmark python -m benchmark.compare --preset standard \
+  --threads 4 --warmups 1 --repeats 3 \
+  --output-dir benchmark-results/standard-comparison
+```
+
+This runs CPU and CUDA in float64, rotates run order, and validates all requested
+positive modes against matching full CPU spectra (relative tolerance `1e-3`,
+absolute tolerance `1e-7`). Pass `--devices cpu` on a machine without CUDA.
+The comparison exits nonzero if requests fail, are skipped, contain unavailable
+modes, or disagree with the reference. A valid empty positive spectrum passes.
+
+`comparison.json` records hardware, package versions, thread settings, source
+hashes, repeated timings, and validation results. CSV and JSON files retain
+individual measured requests. Query time includes construction, eigensolving,
+homology, and result processing; pipeline time adds each dataset's construction
+once. Warmups, generic backend preparation, validation, and file writes are
+excluded. Failed-attempt time is retained, and the actual eigensolver device is
+recorded separately from the requested device.
 
 Install the benchmark dependencies and run the standard workload on CPU or
 CUDA:
@@ -267,11 +296,6 @@ defaults to `float32` for benchmark continuity; pass `--dtype float64` for
 higher-precision weighted-Alpha measurements. Check `nvidia-smi` and
 `torch.cuda.is_available()` before interpreting a GPU run.
 
-## Development checks
-
-The full development and parity-test commands live in
-[CONTRIBUTING.md](../CONTRIBUTING.md).
-
 To benchmark the new ordinary and persistent partial solver with the existing
 harness, select `--algorithm partial`, for example:
 
@@ -286,3 +310,8 @@ cap applies to the dense eliminated block for this algorithm. Keep `eigvalsh`
 as the full-spectrum reference; comparisons must match filtration pairs and
 positive eigenvalues, not the length of a partial spectrum. Timing checks should
 run on controlled hardware separately from ordinary correctness CI.
+
+## Development checks
+
+The full development and parity-test commands live in
+[CONTRIBUTING.md](../CONTRIBUTING.md).

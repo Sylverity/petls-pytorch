@@ -121,31 +121,21 @@ jobs:
           UV_PYTHON_DOWNLOADS: never
         run: uv sync --locked --extra dev
 
-      - name: Validate tag matches package version
-        run: |
-          python - <<'PY'
-          import os
-          import pathlib
-          import sys
-          import tomllib
-
-          tag = os.environ["GITHUB_REF_NAME"]
-          if not tag.startswith("v"):
-              print(f"Release tag must start with 'v': {tag}", file=sys.stderr)
-              sys.exit(1)
-
-          version = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]
-          tag_version = tag[1:]
-          if tag_version != version:
-              print(
-                  f"Tag version {tag_version!r} does not match pyproject.toml version {version!r}",
-                  file=sys.stderr,
-              )
-              sys.exit(1)
-          PY
+      - name: Validate release metadata
+        run: uv run --frozen python scripts/check_release.py --tag "$GITHUB_REF_NAME"
 
       - name: Build distributions
         run: uv run --frozen python -m build --no-isolation
+
+      - name: Validate distributions
+        run: |
+          uv run --frozen python scripts/check_release.py --tag "$GITHUB_REF_NAME" --dist-dir dist
+          uv run --frozen python -m twine check --strict dist/*
+
+      - name: Smoke test installed wheel
+        run: |
+          uv pip install --no-deps --target "$RUNNER_TEMP/petls-wheel" dist/*.whl
+          uv run --no-sync python scripts/smoke_wheel.py "$RUNNER_TEMP/petls-wheel"
 
       - name: Attest distributions
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2

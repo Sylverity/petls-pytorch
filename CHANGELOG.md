@@ -1,46 +1,50 @@
 # Changelog
 
-## Unreleased (1.2.0)
-
-- Restrict large partial eigensolves to the Laplacian range: avoid solving for
-  the harmonic block, bound preimage conditioning, and refresh preimages on the
-  configured device when needed. Use the screening tolerance for stopping.
-- Report range reconstruction, working block size, and explicit nullspace
-  handling; leave numerical nullity unset when zero modes were not computed.
-
-
-- Make Gudhi-backed topology summaries default to eight leading positive modes
-  with per-mode quality and independent homology checks.
-- Add device-resident partial ordinary and matrix-free persistent solves,
-  bounded workspaces, and construction/solve diagnostics; no CPU spectral fallback.
-- Extract Alpha boundaries once while preserving its orientation convention.
-- Preserve explicit full-spectrum and harmonic-localization APIs.
-
-
-### Fixed
-
-- Decoupled real positive-mode selection and rank from modulo-11 homology.
-  Torsion no longer causes complete solves to skip positive eigenvalues or
-  reject valid spectra; coefficient-field agreement is reported separately.
-- Made harmonic-localization completeness describe the recovered real kernel,
-  independently of modular Betti counts, with explicit unknown/partial states.
-- Reject numerically singular Cholesky pivots in persistent Schur corrections,
-  including CUDA factorizations that report success on a singular Gram block.
-- Preserved small positive eigenvalues and their multiplicities using the configured zero tolerance in `nonzero_spectra()`.
-- Cleared obsolete topology and geometric mappings when replacing boundaries, while preserving the original complex on invalid updates.
-- Included rectangular boundary allocations in dense memory guards.
-- Kept batch spectrum results consistent for empty and single-request batches, including file export.
+## 1.2.0 - 2026-10-08
 
 ### Added
 
-- Added `harmonic_participation()` with basis-invariant projector-diagonal scores,
-  point/label localization, and explicit flags for incomplete harmonic subspaces.
-- Reproducible topology and molecular-crystal demos.
+- `positive_spectrum()` returns leading real positive modes with per-mode
+  residuals, quality labels, and construction/solve diagnostics on CPU or CUDA.
+- `harmonic_participation()` provides basis-invariant simplex and point scores,
+  optional labels, and explicit completeness flags.
+- Repeated CPU/CUDA benchmark comparisons record hardware and source provenance
+  and validate every requested mode against a full CPU spectrum.
+- Reproducible torus and molecular-crystal demos, with updated documentation.
+- Distribution checks validate release metadata, README rendering, source-archive
+  contents, and the installed wheel before publication.
 
 ### Changed
 
-- Updated the README with a clearer introduction, benchmarks, and streamlined technical details.
-- Simplified repository security and maintenance settings.
+- Gudhi-backed `topology_summary()` defaults to eight leading positive modes.
+  Use `spectral_mode="full"` for the previous summary route. Explicit spectrum
+  and harmonic-localization APIs retain their configured behavior.
+- Large partial solves operate in the Laplacian range, with a working block
+  independent of Betti multiplicity. Numerical nullity remains unknown when the
+  kernel was not computed; the configured residual tolerance controls stopping.
+- Complete device solves handle small matrices using measured CPU/CUDA size
+  cutoffs. Tight allocation guards retain range iteration when its workspace fits.
+- Alpha boundaries are extracted once, preserving their orientation convention.
+- README benchmarks now measure the current default and full-spectrum solvers
+  in float64, including homology and result processing on both timing paths.
+
+### Fixed
+
+- Real positive-mode selection and rank no longer depend on modulo-11 Betti
+  counts. Coefficient-field disagreement is reported separately from solver
+  quality, so torsion does not skip modes or invalidate correct real spectra.
+- Harmonic-localization completeness describes the recovered real kernel,
+  independently of modular Betti counts, including unknown and truncated states.
+- Persistent Schur corrections reject numerically singular Cholesky pivots,
+  including CUDA factorizations that report success on a singular Gram block.
+- `nonzero_spectra()` preserves small positive eigenvalues and multiplicities
+  using the configured zero tolerance.
+- Replacing boundaries clears stale topology and geometric mappings; invalid
+  updates preserve the original complex.
+- Dense allocation guards include rectangular boundary matrices.
+- Empty and single-request spectrum batches retain consistent results and exports.
+- Source distributions include the full test suite, fixtures, benchmark tools,
+  and release documentation. README links and images work on GitHub and PyPI.
 
 ## 1.1.2 - 2026-08-17
 
