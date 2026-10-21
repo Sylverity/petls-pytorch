@@ -7,6 +7,9 @@ updates:
       day: monday
       time: "09:00"
       timezone: America/Los_Angeles
+    # Wait two weeks after release before proposing version updates.
+    cooldown:
+      default-days: 14
     open-pull-requests-limit: 10
     labels:
       - dependencies
@@ -25,6 +28,9 @@ updates:
       day: monday
       time: "09:30"
       timezone: America/Los_Angeles
+    # Wait two weeks after release before proposing version updates.
+    cooldown:
+      default-days: 14
     open-pull-requests-limit: 10
     labels:
       - dependencies

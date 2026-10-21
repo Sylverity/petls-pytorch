@@ -30,6 +30,23 @@ source .venv/bin/activate
 python -m pip install -e ".[dev]"
 ```
 
+## Dependency updates
+
+Wait at least 14 days after a dependency release before accepting an update.
+This repository uses Python and uv, so the equivalent of pnpm's
+`minimumReleaseAge: 20160` is a Dependabot `cooldown.default-days: 14` for both
+uv and GitHub Actions in `.github/dependabot.yml`.
+
+Before merging, verify the release dates of every updated dependency, including
+transitive packages in `uv.lock`, and require the existing CI checks to pass.
+For grouped updates, every release must meet the waiting period. Recheck the
+versions and dates if Dependabot refreshes the pull request.
+
+Dependabot's cooldown applies to version updates, not security updates, and it
+does not enforce a merge gate or constrain manual uv resolutions. Apply the same
+14-day review to security and manual updates; flag urgent fixes for an explicit
+maintainer exception instead of silently bypassing the waiting period.
+
 ## Running checks
 
 Run the same core checks used by continuous integration:
