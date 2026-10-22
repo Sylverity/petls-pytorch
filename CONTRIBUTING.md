@@ -10,7 +10,7 @@ benchmarks, and focused implementation changes are all welcome.
 
 ## Development setup
 
-The project supports CPython 3.10 through 3.14. The quickest setup uses
+The project supports CPython 3.11 through 3.14. The quickest setup uses
 [uv](https://docs.astral.sh/uv/):
 
 ```bash
@@ -56,6 +56,7 @@ uv run --frozen pytest -m "not parity"
 uv run --frozen ruff format --check .
 uv run --frozen ruff check .
 uv run --frozen mypy src/petls_pytorch benchmark
+uv audit --locked
 ```
 
 The parity suite requires the reference PETLS package:
@@ -94,6 +95,7 @@ uv run --frozen pytest
 uv run --frozen ruff format --check .
 uv run --frozen ruff check .
 uv run --frozen mypy src/petls_pytorch benchmark
+uv audit --locked
 uv run --frozen python scripts/check_release.py
 ```
 

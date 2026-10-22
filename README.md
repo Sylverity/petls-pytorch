@@ -86,7 +86,10 @@ cd petls-pytorch
 python -m pip install -e .
 ```
 
-CPython 3.10–3.14 is supported. For GPU execution, install the CUDA-enabled
+The current development branch requires CPython 3.11–3.14.
+Release 1.2.0 supported Python 3.10; the minimum was raised to use Pillow 13
+security fixes throughout the optional analysis, benchmark, and development dependencies.
+For GPU execution, install the CUDA-enabled
 PyTorch build appropriate for your system using the
 [official PyTorch installer](https://pytorch.org/get-started/locally/).
 

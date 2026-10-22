@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Security
+
+- Require Pillow 13.0.0 or newer and update the lockfile to remove the vulnerable
+  image codecs; require certifi 2026.10.19 or newer for release tooling to remove
+  compromised emSign certificate authorities. These two updates were approved
+  as an exception to the usual 14-day release cooldown.
+- Audit all dependency extras in CI and scheduled security runs, and document
+  private vulnerability reporting.
+
+### Changed
+
+- Raise the minimum Python version to 3.11 because patched Pillow 13 no longer
+  supports Python 3.10. Python 3.11–3.14 remain supported.
+
 ## 1.2.0 - 2026-10-08
 
 ### Added

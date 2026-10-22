@@ -1,4 +1,4 @@
-include CHANGELOG.md CITATION.cff CONTRIBUTING.md uv.lock
+include CHANGELOG.md CITATION.cff CONTRIBUTING.md SECURITY.md uv.lock
 recursive-include tests *.py
 recursive-include tests/variants/data *
 recursive-include benchmark *.py
