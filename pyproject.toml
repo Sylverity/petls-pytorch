@@ -7,7 +7,7 @@ name = "petls-pytorch"
 version = "1.2.0"
 description = "GPU-native Persistent Topological Laplacians in PyTorch"
 readme = "README.md"
-requires-python = ">=3.10,<3.15"
+requires-python = ">=3.11,<3.15"
 license = "Apache-2.0"
 authors = [
     {name = "Sumner K. Marston", email = "sumner@sylverity.com"}
@@ -17,7 +17,6 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -34,18 +33,24 @@ dependencies = [
 [project.optional-dependencies]
 # tadasets is only used by the benchmark harness (benchmark/datasets.py), not by the
 # installed package, so it lives here rather than in the runtime dependencies above.
+# Every plotting extra requires patched Pillow, including transitive users.
 benchmark = [
+    "pillow>=13.0.0",
     "tadasets>=0.2.0",
 ]
 analysis = [
     "gemmi>=0.7.0",
     "matplotlib>=3.7.0",
-    "pillow>=12.3.0",
+    "pillow>=13.0.0",
 ]
 parity = [
+    "pillow>=13.0.0",
     "petls==1.0.1",
 ]
 dev = [
+    "pillow>=13.0.0",
+    # Twine uses requests/certifi when uploading release artifacts.
+    "certifi>=2026.10.19",
     "build==1.6.1",
     "pytest>=7.4.0",
     "pytest-benchmark>=4.0.0",
@@ -94,7 +99,7 @@ skip_covered = true
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F"]
