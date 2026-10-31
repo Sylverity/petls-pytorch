@@ -57,7 +57,7 @@ dev = [
     "pytest-cov>=7.0.0",
     "ruff==0.16.10",
     "mypy==2.4.0",
-    "setuptools==84.0.0",
+    "setuptools==84.1.0",
     "tadasets>=0.2.0",
     "twine==7.0.0",
     "wheel==0.48.0",
