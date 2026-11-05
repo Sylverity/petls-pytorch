@@ -4,6 +4,10 @@
 
 ### Security
 
+- Update filelock to 4.2.1 and setuptools to 84.1.0 to resolve the current
+  dependency audit findings. All updated packages and actions meet the existing
+  14-day release cooldown.
+
 - Require Pillow 13.0.0 or newer and update the lockfile to remove the vulnerable
   image codecs; require certifi 2026.10.19 or newer for release tooling to remove
   compromised emSign certificate authorities. These two updates were approved
@@ -12,6 +16,9 @@
   private vulnerability reporting.
 
 ### Changed
+
+- Update Matplotlib, Ruff, and pinned GitHub Actions; use uv 0.11.6 consistently
+  in CI, security, and release workflows to keep lockfile validation reproducible.
 
 - Raise the minimum Python version to 3.11 because patched Pillow 13 no longer
   supports Python 3.10. Python 3.11–3.14 remain supported.
